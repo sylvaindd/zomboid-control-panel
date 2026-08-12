@@ -29,6 +29,7 @@ import {
   RotateCw,
   Lock,
   User,
+  Users,
   ExternalLink,
   FolderOpen,
   Palette,
@@ -93,6 +94,7 @@ import { useSocket } from "@/contexts/SocketContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme, type ThemeName } from "@/contexts/ThemeContext";
 import { BridgeStatusBadge } from "@/components/BridgeStatusBadge";
+import UsersAndRoles from "@/components/settings/UsersAndRoles";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
@@ -479,6 +481,15 @@ export default function Settings() {
       group: "Panel",
       tip: "Account password and sign-in",
       description: "Panel account password and sign-in controls.",
+    },
+    {
+      id: "users",
+      label: "Users & roles",
+      icon: Users,
+      group: "Panel",
+      tip: "Panel accounts and what each role may do",
+      description:
+        "Panel accounts, their roles, and which capabilities each role can reach.",
     },
     {
       id: "connection",
@@ -5309,6 +5320,10 @@ export default function Settings() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="users" className="mt-0">
+            <UsersAndRoles />
           </TabsContent>
 
           <TabsContent value="about" className="mt-0 space-y-5">

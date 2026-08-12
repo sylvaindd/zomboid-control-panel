@@ -2793,6 +2793,15 @@ export const debugApi = {
   }> => apiGet(`/debug/performance-history?limit=${limit}`),
 };
 
+// A panel account as returned by the /auth/users endpoints.
+export interface PanelUser {
+  id: string;
+  username: string;
+  role: string;
+  createdAt: string | null;
+  lastLogin: string | null;
+}
+
 // Auth API
 export const authApi = {
   changePassword: (
@@ -2813,6 +2822,37 @@ export const authApi = {
     codes: string[];
     createdAt: string;
   }> => apiPost("/auth/recovery-codes", {}),
+
+  // Panel accounts (admin only — non-admins get 401/403)
+  listUsers: (): Promise<{ users: PanelUser[] }> => apiGet("/auth/users"),
+
+  createUser: (
+    username: string,
+    password: string,
+    role: string,
+  ): Promise<{ success: boolean; user: PanelUser }> =>
+    apiPost("/auth/users", { username, password, role }),
+
+  setUserRole: (
+    id: string,
+    role: string,
+  ): Promise<{ success: boolean; user: PanelUser }> =>
+    apiPut(`/auth/users/${encodeURIComponent(id)}/role`, { role }),
+
+  deleteUser: (id: string): Promise<{ success: boolean }> =>
+    apiDelete(`/auth/users/${encodeURIComponent(id)}`),
+
+  // Capability -> minimum role map. Readable by any signed-in account;
+  // only admins may write it back.
+  getPermissions: (): Promise<{
+    permissions: Record<string, string>;
+    roles: string[];
+  }> => apiGet("/auth/permissions"),
+
+  updatePermissions: (
+    permissions: Record<string, string>,
+  ): Promise<{ success: boolean; permissions: Record<string, string> }> =>
+    apiPut("/auth/permissions", { permissions }),
 };
 
 // Servers detection API helpers (added to serversApi)
