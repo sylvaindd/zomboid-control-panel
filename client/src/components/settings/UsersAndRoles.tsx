@@ -80,6 +80,16 @@ const CAPABILITIES: { key: string; label: string; desc: string }[] = [
     label: "RCON console",
     desc: "Run arbitrary RCON commands",
   },
+  {
+    key: "mods.manage",
+    label: "Mod manager",
+    desc: "Install, remove and reorder Workshop mods, presets and collections",
+  },
+  {
+    key: "config.files",
+    label: "Server configuration",
+    desc: "Edit the server's INI, sandbox vars, spawn points and regions",
+  },
 ];
 
 function InlineFeedback({

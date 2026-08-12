@@ -24,11 +24,9 @@ export type RouteAccess =
  * individually.
  */
 export const ROUTE_ACCESS: Record<string, RouteAccess> = {
-  // Workshop mods, server files, templates, chunk deletion, panel config,
-  // Discord credentials, server profiles and diagnostics.
-  '/mods': { kind: 'admin' },
+  // Templates, chunk deletion, panel config, Discord credentials, server
+  // profiles and diagnostics.
   '/templates': { kind: 'admin' },
-  '/server-config': { kind: 'admin' },
   '/backups': { kind: 'admin' },
   '/chunks': { kind: 'admin' },
   '/chunk-cleaner': { kind: 'admin' },
@@ -41,6 +39,10 @@ export const ROUTE_ACCESS: Record<string, RouteAccess> = {
   // Retunable from the permission matrix.
   '/events': { kind: 'capability', capability: 'world.environment' },
   '/scheduler': { kind: 'capability', capability: 'scheduler.manage' },
+  // Independent of each other: an operator can hand out mod management
+  // without handing out the server's config files, or the reverse.
+  '/mods': { kind: 'capability', capability: 'mods.manage' },
+  '/server-config': { kind: 'capability', capability: 'config.files' },
 }
 
 export interface AccessChecker {

@@ -9,9 +9,7 @@ function role(capabilities: Record<string, boolean>) {
 }
 
 const ADMIN_ONLY = [
-  '/mods',
   '/templates',
-  '/server-config',
   '/backups',
   '/chunks',
   '/servers',
@@ -38,6 +36,23 @@ describe('canAccessPath', () => {
   it('follows the configured tier for /scheduler', () => {
     expect(canAccessPath('/scheduler', role({ 'scheduler.manage': true }))).toBe(true)
     expect(canAccessPath('/scheduler', role({ 'scheduler.manage': false }))).toBe(false)
+  })
+
+  it('grants the mod manager without the config editor', () => {
+    const modderOnly = role({ 'mods.manage': true, 'config.files': false })
+    expect(canAccessPath('/mods', modderOnly)).toBe(true)
+    expect(canAccessPath('/server-config', modderOnly)).toBe(false)
+  })
+
+  it('grants the config editor without the mod manager', () => {
+    const configOnly = role({ 'mods.manage': false, 'config.files': true })
+    expect(canAccessPath('/server-config', configOnly)).toBe(true)
+    expect(canAccessPath('/mods', configOnly)).toBe(false)
+  })
+
+  it('denies both to a role granted neither', () => {
+    expect(canAccessPath('/mods', role({}))).toBe(false)
+    expect(canAccessPath('/server-config', role({}))).toBe(false)
   })
 
   it.each(['/', '/players', '/console', '/chat', '/world-map'])(

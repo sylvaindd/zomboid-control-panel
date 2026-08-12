@@ -19,7 +19,7 @@ import {
   validateRemoteConfigTransport,
 } from "../services/remoteConfigFiles.js";
 import { requireStoppedForLocalConfigMutation } from "../services/configMutationGuard.js";
-import { requireRole } from "../services/auth.js";
+import { requirePermission } from "../services/auth.js";
 
 const router = express.Router();
 
@@ -979,7 +979,7 @@ router.get("/ini", async (req, res) => {
 });
 
 // Save INI file
-router.put("/ini", requireRole("admin"), async (req, res) => {
+router.put("/ini", requirePermission("config.files"), async (req, res) => {
   try {
     const configPath = await getServerConfigPath();
     const serverName = await getServerName();
@@ -1046,7 +1046,7 @@ router.get("/sandbox", async (req, res) => {
 });
 
 // Save SandboxVars
-router.put("/sandbox", requireRole("admin"), async (req, res) => {
+router.put("/sandbox", requirePermission("config.files"), async (req, res) => {
   try {
     log.info("PUT /sandbox");
     const configPath = await getServerConfigPath();
@@ -1119,7 +1119,7 @@ router.put("/sandbox", requireRole("admin"), async (req, res) => {
 // sandbox schema knows nothing about, so they are addressed as "Block.Key" and
 // rewritten in place; a key that is not already in the file is left alone,
 // since PZ regenerates those from the mod's own defaults.
-router.put("/sandbox-option", requireRole("admin"), async (req, res) => {
+router.put("/sandbox-option", requirePermission("config.files"), async (req, res) => {
   try {
     const { name, value } = req.body || {};
 
@@ -1272,7 +1272,7 @@ router.get("/sandbox/validate", async (req, res) => {
 // first, and refuses to write anything unless the repaired content is
 // verified brace-balanced — if the corruption doesn't match a known
 // pattern, nothing is written and the caller is told to fix it manually.
-router.post("/sandbox/repair", requireRole("admin"), async (req, res) => {
+router.post("/sandbox/repair", requirePermission("config.files"), async (req, res) => {
   try {
     log.info("POST /sandbox/repair");
     const configPath = await getServerConfigPath();
@@ -1359,7 +1359,7 @@ router.get("/spawnpoints", async (req, res) => {
 });
 
 // Save spawn points
-router.put("/spawnpoints", requireRole("admin"), async (req, res) => {
+router.put("/spawnpoints", requirePermission("config.files"), async (req, res) => {
   try {
     log.info("PUT /spawnpoints");
     const configPath = await getServerConfigPath();
@@ -1414,7 +1414,7 @@ router.get("/spawnregions", async (req, res) => {
 });
 
 // Save spawn regions
-router.put("/spawnregions", requireRole("admin"), async (req, res) => {
+router.put("/spawnregions", requirePermission("config.files"), async (req, res) => {
   try {
     const configPath = await getServerConfigPath();
     const serverName = await getServerName();
@@ -1476,7 +1476,7 @@ router.get("/raw/:type", async (req, res) => {
 });
 
 // Save raw file content
-router.put("/raw/:type", requireRole("admin"), async (req, res) => {
+router.put("/raw/:type", requirePermission("config.files"), async (req, res) => {
   try {
     const configPath = await getServerConfigPath();
     const serverName = await getServerName();
@@ -1572,7 +1572,7 @@ router.get("/backups", async (req, res) => {
 });
 
 // Restore from backup
-router.post("/restore/:filename", requireRole("admin"), async (req, res) => {
+router.post("/restore/:filename", requirePermission("config.files"), async (req, res) => {
   try {
     const backupDir = await getBackupPath();
     const configPath = await getServerConfigPath();
@@ -1623,7 +1623,7 @@ router.post("/restore/:filename", requireRole("admin"), async (req, res) => {
 });
 
 // Save and reload (calls RCON reloadoptions)
-router.post("/save-and-reload", requireRole("admin"), async (req, res) => {
+router.post("/save-and-reload", requirePermission("config.files"), async (req, res) => {
   try {
     log.info("POST /save-and-reload");
     const rconService = req.app.get("rconService");
@@ -1722,7 +1722,7 @@ router.get("/templates/:id", async (req, res) => {
 });
 
 // POST /templates - Save current config as a template
-router.post("/templates", requireRole("admin"), async (req, res) => {
+router.post("/templates", requirePermission("config.files"), async (req, res) => {
   log.info("POST /templates (create)");
   try {
     const {
@@ -1803,7 +1803,7 @@ router.post("/templates", requireRole("admin"), async (req, res) => {
 });
 
 // POST /templates/:id/apply - Apply a template to current config
-router.post("/templates/:id/apply", requireRole("admin"), async (req, res) => {
+router.post("/templates/:id/apply", requirePermission("config.files"), async (req, res) => {
   log.info(`POST /templates/${req.params.id}/apply`);
   try {
     // Sanitize template ID to prevent path traversal
@@ -1874,7 +1874,7 @@ router.post("/templates/:id/apply", requireRole("admin"), async (req, res) => {
 });
 
 // PUT /templates/:id - Update template metadata
-router.put("/templates/:id", requireRole("admin"), async (req, res) => {
+router.put("/templates/:id", requirePermission("config.files"), async (req, res) => {
   try {
     // Sanitize template ID to prevent path traversal
     const safeId = path.basename(req.params.id).replace(/[^a-z0-9_-]/gi, "");
@@ -1907,7 +1907,7 @@ router.put("/templates/:id", requireRole("admin"), async (req, res) => {
 });
 
 // DELETE /templates/:id - Delete a template
-router.delete("/templates/:id", requireRole("admin"), async (req, res) => {
+router.delete("/templates/:id", requirePermission("config.files"), async (req, res) => {
   log.info(`DELETE /templates/${req.params.id}`);
   try {
     // Sanitize template ID to prevent path traversal

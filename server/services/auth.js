@@ -70,6 +70,13 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   "server.lifecycle": "admin",
   "scheduler.manage": "admin",
   "rcon.execute": "admin",
+  // Editing the server's own .ini / sandbox / spawn files (routes/serverFiles.js).
+  // Writes are confined to that server's four known config files, not the
+  // wider filesystem — routes/config.js and the panel's own settings stay
+  // permanently admin.
+  "config.files": "admin",
+  // Workshop mod install/remove/presets/collection sync (routes/mods.js).
+  "mods.manage": "admin",
 };
 
 class AuthService {

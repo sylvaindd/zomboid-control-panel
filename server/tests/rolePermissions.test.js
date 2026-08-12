@@ -322,6 +322,8 @@ describe("role vocabulary", () => {
   it("covers every capability the UI can retune", () => {
     expect(Object.keys(DEFAULT_ROLE_PERMISSIONS).sort()).toEqual([
       "chat.broadcast",
+      "config.files",
+      "mods.manage",
       "players.gm",
       "players.moderate",
       "rcon.execute",
@@ -330,5 +332,23 @@ describe("role vocabulary", () => {
       "server.save",
       "world.environment",
     ]);
+  });
+
+  it("keeps mod management and config file editing independent", async () => {
+    expect(DEFAULT_ROLE_PERMISSIONS["mods.manage"]).toBe("admin");
+    expect(DEFAULT_ROLE_PERMISSIONS["config.files"]).toBe("admin");
+
+    // Handing out one must not hand out the other.
+    await authService.updateRolePermissions({ "mods.manage": "moderator" });
+    const perms = authService.getRolePermissions();
+    expect(perms["mods.manage"]).toBe("moderator");
+    expect(perms["config.files"]).toBe("admin");
+
+    const modManager = requirePermission("mods.manage");
+    const configEditor = requirePermission("config.files");
+    const asModerator = { user: { role: "moderator" } };
+
+    expect((await runMiddleware(modManager, asModerator)).passed).toBe(true);
+    expect((await runMiddleware(configEditor, asModerator)).passed).toBe(false);
   });
 });
