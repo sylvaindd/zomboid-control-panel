@@ -31,7 +31,10 @@ function getHandler(path, method = "post") {
   const layer = router.stack.find(
     (entry) => entry.route?.path === path && entry.route.methods[method],
   );
-  return layer.route.stack[0].handle;
+  // The first stack entry is now an authorization middleware; these tests
+  // target the business-logic handler, so take the last one. Authorization
+  // itself is covered by the dedicated role-rejection suites.
+  return layer.route.stack[layer.route.stack.length - 1].handle;
 }
 
 const addItem = vi.fn();

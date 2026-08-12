@@ -3,6 +3,7 @@ import cron from 'node-cron';
 import { createLogger } from '../utils/logger.js';
 const log = createLogger('API:Scheduler');
 import { sanitizeError } from '../utils/sanitize.js';
+import { requirePermission } from '../services/auth.js';
 import {
   getScheduledTasks,
   createScheduledTask,
@@ -86,7 +87,7 @@ router.get('/tasks', async (req, res) => {
 });
 
 // Validate cron expression
-router.post('/validate-cron', async (req, res) => {
+router.post('/validate-cron', requirePermission('scheduler.manage'), async (req, res) => {
   try {
     const { cronExpression } = req.body;
     if (!cronExpression) {
@@ -105,7 +106,7 @@ router.post('/validate-cron', async (req, res) => {
 });
 
 // Create a new scheduled task
-router.post('/tasks', async (req, res) => {
+router.post('/tasks', requirePermission('scheduler.manage'), async (req, res) => {
   try {
     const scheduler = req.app.get('scheduler');
     const { name, cronExpression, command, serverId } = req.body;
@@ -176,7 +177,7 @@ router.post('/tasks', async (req, res) => {
 });
 
 // Update a scheduled task
-router.put('/tasks/:id', async (req, res) => {
+router.put('/tasks/:id', requirePermission('scheduler.manage'), async (req, res) => {
   try {
     const scheduler = req.app.get('scheduler');
     const { id } = req.params;
@@ -258,7 +259,7 @@ router.put('/tasks/:id', async (req, res) => {
 });
 
 // Delete a scheduled task
-router.delete('/tasks/:id', async (req, res) => {
+router.delete('/tasks/:id', requirePermission('scheduler.manage'), async (req, res) => {
   try {
     const scheduler = req.app.get('scheduler');
     const { id } = req.params;
@@ -285,7 +286,7 @@ router.delete('/tasks/:id', async (req, res) => {
 // a literal string. A restart can run for several minutes (warning
 // countdown), so this fires in the background and returns immediately;
 // completion shows up in the schedule history.
-router.post('/tasks/:id/run', async (req, res) => {
+router.post('/tasks/:id/run', requirePermission('scheduler.manage'), async (req, res) => {
   try {
     const scheduler = req.app.get('scheduler');
     const { id } = req.params;
@@ -313,7 +314,7 @@ router.post('/tasks/:id/run', async (req, res) => {
 });
 
 // Trigger immediate restart
-router.post('/restart-now', async (req, res) => {
+router.post('/restart-now', requirePermission('scheduler.manage'), async (req, res) => {
   try {
     const activeServer = await getActiveServer();
     if (activeServer?.isRemote) {
@@ -377,7 +378,7 @@ router.get('/history', async (req, res) => {
 });
 
 // Clear schedule execution history
-router.delete('/history', async (req, res) => {
+router.delete('/history', requirePermission('scheduler.manage'), async (req, res) => {
   try {
     await clearScheduleHistory();
     res.json({ success: true, message: 'History cleared' });

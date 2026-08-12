@@ -19,6 +19,7 @@ import { VEHICLES, PERKS, PERK_CATALOG, ACCESS_LEVELS } from '../utils/commands.
 import { sanitizeError } from '../utils/sanitize.js';
 import bridge from '../services/panelBridge.js';
 import { listWhitelistAccounts } from '../utils/whitelistDb.js';
+import { requireRole, requirePermission } from '../services/auth.js';
 
 const router = express.Router();
 const MAX_EXPORT_FILE_BYTES = 5 * 1024 * 1024;
@@ -138,7 +139,7 @@ router.get('/', async (req, res) => {
 });
 
 // Kick player
-router.post('/kick', async (req, res) => {
+router.post('/kick', requirePermission('players.moderate'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { username, reason } = req.body;
@@ -167,7 +168,7 @@ router.post('/kick', async (req, res) => {
 });
 
 // Ban player
-router.post('/ban', async (req, res) => {
+router.post('/ban', requirePermission('players.moderate'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { username, banIp, reason } = req.body;
@@ -196,7 +197,7 @@ router.post('/ban', async (req, res) => {
 });
 
 // Unban player
-router.post('/unban', async (req, res) => {
+router.post('/unban', requirePermission('players.moderate'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { username } = req.body;
@@ -221,7 +222,7 @@ router.post('/unban', async (req, res) => {
 });
 
 // Set access level
-router.post('/access-level', async (req, res) => {
+router.post('/access-level', requireRole('admin'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { username, level } = req.body;
@@ -250,7 +251,7 @@ router.post('/access-level', async (req, res) => {
 });
 
 // Add to whitelist
-router.post('/whitelist/add', async (req, res) => {
+router.post('/whitelist/add', requirePermission('players.moderate'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { username, password } = req.body;
@@ -279,7 +280,7 @@ router.post('/whitelist/add', async (req, res) => {
 });
 
 // Remove from whitelist
-router.post('/whitelist/remove', async (req, res) => {
+router.post('/whitelist/remove', requirePermission('players.moderate'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { username } = req.body;
@@ -305,7 +306,7 @@ router.post('/whitelist/remove', async (req, res) => {
 });
 
 // Teleport player
-router.post('/teleport', async (req, res) => {
+router.post('/teleport', requirePermission('players.gm'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     let { player1, player2, x, y, z } = req.body;
@@ -363,7 +364,7 @@ router.post('/teleport', async (req, res) => {
 });
 
 // Add item to player
-router.post('/add-item', async (req, res) => {
+router.post('/add-item', requirePermission('players.gm'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { username, item, count } = req.body;
@@ -406,7 +407,7 @@ router.post('/add-item', async (req, res) => {
 });
 
 // Add XP to player
-router.post('/add-xp', async (req, res) => {
+router.post('/add-xp', requirePermission('players.gm'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { username, perk, amount } = req.body;
@@ -439,7 +440,7 @@ router.post('/add-xp', async (req, res) => {
 });
 
 // Spawn vehicle
-router.post('/add-vehicle', async (req, res) => {
+router.post('/add-vehicle', requirePermission('players.gm'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { vehicle, username } = req.body;
@@ -472,7 +473,7 @@ router.post('/add-vehicle', async (req, res) => {
 });
 
 // Spawn a vehicle at a map coordinate (Build 42 uses RCON for this operation).
-router.post('/add-vehicle-at', async (req, res) => {
+router.post('/add-vehicle-at', requirePermission('players.gm'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { vehicle, x, y, z = 0 } = req.body;
@@ -496,7 +497,7 @@ router.post('/add-vehicle-at', async (req, res) => {
 });
 
 // God mode
-router.post('/godmode', async (req, res) => {
+router.post('/godmode', requirePermission('players.gm'), async (req, res) => {
   try {
     const { username, enabled } = req.body;
 
@@ -519,7 +520,7 @@ router.post('/godmode', async (req, res) => {
 });
 
 // Invisible
-router.post('/invisible', async (req, res) => {
+router.post('/invisible', requirePermission('players.gm'), async (req, res) => {
   try {
     const { username, enabled } = req.body;
 
@@ -542,7 +543,7 @@ router.post('/invisible', async (req, res) => {
 });
 
 // Noclip
-router.post('/noclip', async (req, res) => {
+router.post('/noclip', requirePermission('players.gm'), async (req, res) => {
   try {
     const { username, enabled } = req.body;
 
@@ -591,7 +592,7 @@ router.get('/steamid-bans', async (req, res) => {
 });
 
 // Ban by SteamID
-router.post('/banid', async (req, res) => {
+router.post('/banid', requirePermission('players.moderate'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { steamId, reason } = req.body;
@@ -623,7 +624,7 @@ router.post('/banid', async (req, res) => {
 });
 
 // Unban by SteamID
-router.post('/unbanid', async (req, res) => {
+router.post('/unbanid', requirePermission('players.moderate'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { steamId } = req.body;
@@ -649,7 +650,7 @@ router.post('/unbanid', async (req, res) => {
 });
 
 // Voice ban
-router.post('/voiceban', async (req, res) => {
+router.post('/voiceban', requirePermission('players.moderate'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { username, enabled } = req.body;
@@ -674,7 +675,7 @@ router.post('/voiceban', async (req, res) => {
 });
 
 // Add user to whitelist server (password is optional in Build 42)
-router.post('/adduser', async (req, res) => {
+router.post('/adduser', requirePermission('players.moderate'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { username, password } = req.body;
@@ -704,7 +705,7 @@ router.post('/adduser', async (req, res) => {
 });
 
 // Add all connected players to whitelist
-router.post('/whitelist/addall', async (req, res) => {
+router.post('/whitelist/addall', requirePermission('players.moderate'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const result = await rconService.addAllToWhitelist();
@@ -807,7 +808,7 @@ router.get('/notes/:playerName', async (req, res) => {
 });
 
 // Create or update player note
-router.post('/notes', async (req, res) => {
+router.post('/notes', requirePermission('players.moderate'), async (req, res) => {
   try {
     const { playerName, note } = req.body;
     const tags = req.body.tags || [];
@@ -838,7 +839,7 @@ router.post('/notes', async (req, res) => {
 });
 
 // Delete player note
-router.delete('/notes/:playerName', async (req, res) => {
+router.delete('/notes/:playerName', requirePermission('players.moderate'), async (req, res) => {
   try {
     const success = await deletePlayerNote(req.params.playerName);
     if (!success) {
@@ -954,7 +955,7 @@ router.get('/exports/:username/:filename', async (req, res) => {
 });
 
 // Delete a specific export file
-router.delete('/exports/:username/:filename', async (req, res) => {
+router.delete('/exports/:username/:filename', requirePermission('players.gm'), async (req, res) => {
   try {
     const { username, filename } = req.params;
     if (!/^[a-zA-Z0-9_-]+$/.test(username) || !/^[a-zA-Z0-9_.-]+\.json$/.test(filename)) {

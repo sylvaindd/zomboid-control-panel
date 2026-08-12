@@ -48,6 +48,7 @@ import {
   listAvailableBrowsers,
   extractSteamCookies,
 } from "../utils/browserCookies.js";
+import { requireRole } from "../services/auth.js";
 
 const router = express.Router();
 
@@ -306,7 +307,7 @@ router.get("/tracked", async (req, res) => {
 // "Workshop Mod <id>" placeholder. Tries the on-disk mod.info first, then
 // falls back to Steam's GetPublishedFileDetails (batched) for mods whose
 // workshop folder isn't on this machine yet.
-router.post("/refresh-names", async (req, res) => {
+router.post("/refresh-names", requireRole("admin"), async (req, res) => {
   try {
     const modChecker = req.app.get("modChecker");
     const { workshopIds } = req.body || {};
@@ -394,7 +395,7 @@ router.post("/refresh-names", async (req, res) => {
 });
 
 // Add a mod to track
-router.post("/track", async (req, res) => {
+router.post("/track", requireRole("admin"), async (req, res) => {
   try {
     const modChecker = getModChecker(req, res);
     if (!modChecker) return;
@@ -426,7 +427,7 @@ router.post("/track", async (req, res) => {
 });
 
 // Remove a mod from tracking
-router.delete("/track/:workshopId", async (req, res) => {
+router.delete("/track/:workshopId", requireRole("admin"), async (req, res) => {
   try {
     const { workshopId } = req.params;
 
@@ -470,7 +471,7 @@ router.get("/ignored", async (req, res) => {
 });
 
 // Un-ignore a mod (allow it to be tracked again)
-router.delete("/ignored/:workshopId", async (req, res) => {
+router.delete("/ignored/:workshopId", requireRole("admin"), async (req, res) => {
   try {
     const { workshopId } = req.params;
     if (!workshopId || !/^\d{1,15}$/.test(workshopId)) {
@@ -488,7 +489,7 @@ router.delete("/ignored/:workshopId", async (req, res) => {
 });
 
 // Clear all ignored mods for the active server
-router.delete("/ignored", async (req, res) => {
+router.delete("/ignored", requireRole("admin"), async (req, res) => {
   try {
     const removed = await clearAllIgnoredMods();
     res.json({
@@ -518,7 +519,7 @@ router.get("/ignored-pairs", async (req, res) => {
   }
 });
 
-router.post("/ignored-pairs", async (req, res) => {
+router.post("/ignored-pairs", requireRole("admin"), async (req, res) => {
   try {
     const { modIdA, modIdB, reason } = req.body || {};
     if (
@@ -544,7 +545,7 @@ router.post("/ignored-pairs", async (req, res) => {
   }
 });
 
-router.delete("/ignored-pairs", async (req, res) => {
+router.delete("/ignored-pairs", requireRole("admin"), async (req, res) => {
   try {
     const { modIdA, modIdB } = req.body || {};
     if (
@@ -566,7 +567,7 @@ router.delete("/ignored-pairs", async (req, res) => {
 });
 
 // Manually check for mod updates
-router.post("/check-updates", async (req, res) => {
+router.post("/check-updates", requireRole("admin"), async (req, res) => {
   try {
     const modChecker = getModChecker(req, res);
     if (!modChecker) return;
@@ -604,7 +605,7 @@ router.get("/check-rcon", async (req, res) => {
 });
 
 // Start mod checker
-router.post("/start", async (req, res) => {
+router.post("/start", requireRole("admin"), async (req, res) => {
   try {
     const modChecker = getModChecker(req, res);
     if (!modChecker) return;
@@ -618,7 +619,7 @@ router.post("/start", async (req, res) => {
 });
 
 // Stop mod checker
-router.post("/stop", async (req, res) => {
+router.post("/stop", requireRole("admin"), async (req, res) => {
   try {
     const modChecker = getModChecker(req, res);
     if (!modChecker) return;
@@ -632,7 +633,7 @@ router.post("/stop", async (req, res) => {
 });
 
 // Set check interval
-router.put("/interval", async (req, res) => {
+router.put("/interval", requireRole("admin"), async (req, res) => {
   try {
     const modChecker = getModChecker(req, res);
     if (!modChecker) return;
@@ -663,7 +664,7 @@ router.put("/interval", async (req, res) => {
 });
 
 // Enable auto-restart on mod update
-router.post("/auto-restart", async (req, res) => {
+router.post("/auto-restart", requireRole("admin"), async (req, res) => {
   try {
     const modChecker = getModChecker(req, res);
     if (!modChecker) return;
@@ -694,7 +695,7 @@ router.post("/auto-restart", async (req, res) => {
 });
 
 // Configure restart options
-router.put("/restart-options", async (req, res) => {
+router.put("/restart-options", requireRole("admin"), async (req, res) => {
   try {
     const modChecker = getModChecker(req, res);
     if (!modChecker) return;
@@ -781,7 +782,7 @@ router.get("/workshop-status", async (req, res) => {
 });
 
 // Cancel pending restart (if waiting for players)
-router.post("/cancel-pending-restart", async (req, res) => {
+router.post("/cancel-pending-restart", requireRole("admin"), async (req, res) => {
   try {
     const modChecker = getModChecker(req, res);
     if (!modChecker) return;
@@ -802,7 +803,7 @@ router.post("/cancel-pending-restart", async (req, res) => {
 });
 
 // Sync mods from server config
-router.post("/sync-from-server", async (req, res) => {
+router.post("/sync-from-server", requireRole("admin"), async (req, res) => {
   try {
     // Use direct INI reading (more reliable than serverManager which has path issues)
     const serverConfigPath = await getServerConfigPath();
@@ -941,7 +942,7 @@ router.post("/sync-from-server", async (req, res) => {
 });
 
 // Clear all update flags
-router.post("/clear-updates", async (req, res) => {
+router.post("/clear-updates", requireRole("admin"), async (req, res) => {
   try {
     await clearModUpdates();
     res.json({ success: true, message: "Update flags cleared" });
@@ -1126,7 +1127,7 @@ router.get("/collection/diff", async (req, res) => {
 // add/remove button. Bulk sync (`/collection/sync`) is still available
 // for one-click "fix everything".
 
-router.post("/collection/items", async (req, res) => {
+router.post("/collection/items", requireRole("admin"), async (req, res) => {
   try {
     const collectionId = await getSetting("workshopCollectionId");
     if (!collectionId) {
@@ -1148,7 +1149,7 @@ router.post("/collection/items", async (req, res) => {
   }
 });
 
-router.delete("/collection/items/:workshopId", async (req, res) => {
+router.delete("/collection/items/:workshopId", requireRole("admin"), async (req, res) => {
   try {
     const collectionId = await getSetting("workshopCollectionId");
     if (!collectionId) {
@@ -1172,7 +1173,7 @@ router.delete("/collection/items/:workshopId", async (req, res) => {
 
 // Stop panel tracking for an optional collection item. Unlike DELETE /track,
 // this intentionally does not create an ignore rule or modify Steam.
-router.delete("/collection/tracking/:workshopId", async (req, res) => {
+router.delete("/collection/tracking/:workshopId", requireRole("admin"), async (req, res) => {
   try {
     const workshopId = String(req.params.workshopId || "").trim();
     if (!/^\d{1,15}$/.test(workshopId)) {
@@ -1193,7 +1194,7 @@ router.delete("/collection/tracking/:workshopId", async (req, res) => {
   }
 });
 
-router.post("/collection/sync", async (req, res) => {
+router.post("/collection/sync", requireRole("admin"), async (req, res) => {
   try {
     const collectionId = await getSetting("workshopCollectionId");
     if (!collectionId) {
@@ -1259,7 +1260,7 @@ router.post("/collection/sync", async (req, res) => {
 // no-mutation read of the collection first, then attempts a tiny add+remove
 // dance on a known item to prove write access. We use the FIRST item already
 // in the collection to avoid actually changing its contents.
-router.post("/collection/test", async (req, res) => {
+router.post("/collection/test", requireRole("admin"), async (req, res) => {
   try {
     const collectionId = await getSetting("workshopCollectionId");
     if (!collectionId)
@@ -1312,7 +1313,7 @@ router.get("/collection/browsers", async (req, res) => {
   }
 });
 
-router.post("/collection/extract-cookies", async (req, res) => {
+router.post("/collection/extract-cookies", requireRole("admin"), async (req, res) => {
   try {
     const browser = String(req.body?.browser || "")
       .toLowerCase()
@@ -1339,7 +1340,7 @@ router.post("/collection/extract-cookies", async (req, res) => {
 // Chrome's App-Bound Encryption) and POSTs them here. Authentication is the
 // usual JWT — the extension logs in with the panel's normal username/password
 // first to obtain a token.
-router.post("/collection/extension-push", async (req, res) => {
+router.post("/collection/extension-push", requireRole("admin"), async (req, res) => {
   try {
     const sessionid =
       typeof req.body?.sessionid === "string" ? req.body.sessionid.trim() : "";
@@ -1471,7 +1472,7 @@ router.get("/collection/extension-bundle", async (req, res) => {
 });
 
 // Get Steam Workshop collection details (extract all mods from a collection)
-router.post("/import-collection", async (req, res) => {
+router.post("/import-collection", requireRole("admin"), async (req, res) => {
   try {
     const { collectionUrl } = req.body;
 
@@ -1611,7 +1612,7 @@ router.post("/import-collection", async (req, res) => {
 });
 
 // Get mod info from Steam Workshop (for a single mod)
-router.post("/get-mod-info", async (req, res) => {
+router.post("/get-mod-info", requireRole("admin"), async (req, res) => {
   try {
     const { workshopId } = req.body;
 
@@ -1675,7 +1676,7 @@ router.post("/get-mod-info", async (req, res) => {
 });
 
 // Write mods to server .ini file
-router.post("/write-to-ini", async (req, res) => {
+router.post("/write-to-ini", requireRole("admin"), async (req, res) => {
   try {
     const { mods, mapFolders } = req.body;
     log.info(
@@ -1974,7 +1975,7 @@ router.get("/current-config", async (req, res) => {
 });
 
 // Toggle a single mod ID on/off in the Mods= line
-router.post("/toggle-mod-id", async (req, res) => {
+router.post("/toggle-mod-id", requireRole("admin"), async (req, res) => {
   try {
     const { modId, enabled } = req.body;
 
@@ -2060,7 +2061,7 @@ router.post("/toggle-mod-id", async (req, res) => {
 });
 
 // Batch toggle multiple mod IDs on/off in a single INI write
-router.post("/batch-toggle-mod-ids", async (req, res) => {
+router.post("/batch-toggle-mod-ids", requireRole("admin"), async (req, res) => {
   try {
     const { changes } = req.body;
 
@@ -2162,7 +2163,7 @@ router.post("/batch-toggle-mod-ids", async (req, res) => {
 });
 
 // Add a single mod to server .ini file (appends to existing mods)
-router.post("/add-to-ini", async (req, res) => {
+router.post("/add-to-ini", requireRole("admin"), async (req, res) => {
   try {
     const { workshopId, modId } = req.body;
     // workshopId: the Steam Workshop ID
@@ -2830,7 +2831,7 @@ export function scoreWorkshopDependencyMatch(query, modId, modName) {
 }
 
 // Return available Mod IDs inside a downloaded Workshop Item
-router.post("/inspect-workshop-item", async (req, res) => {
+router.post("/inspect-workshop-item", requireRole("admin"), async (req, res) => {
   try {
     const { workshopId } = req.body;
     if (!workshopId) {
@@ -2866,7 +2867,7 @@ router.post("/inspect-workshop-item", async (req, res) => {
 });
 
 // Remove a single mod from server .ini file
-router.post("/remove-from-ini", async (req, res) => {
+router.post("/remove-from-ini", requireRole("admin"), async (req, res) => {
   try {
     const { workshopId, modId, modIds: clientModIds } = req.body;
 
@@ -3073,7 +3074,7 @@ router.post("/remove-from-ini", async (req, res) => {
 
 // Batch remove multiple mods from tracking AND server .ini in a single operation
 // Avoids the N×2 individual API call problem for bulk removal
-router.post("/batch-remove", async (req, res) => {
+router.post("/batch-remove", requireRole("admin"), async (req, res) => {
   try {
     const { workshopIds } = req.body;
 
@@ -3266,7 +3267,7 @@ router.post("/batch-remove", async (req, res) => {
 });
 
 // Repair Map= entries - validates each entry has actual map data on disk and removes invalid ones
-router.post("/repair-map-entries", async (req, res) => {
+router.post("/repair-map-entries", requireRole("admin"), async (req, res) => {
   try {
     const serverConfigPath = await getServerConfigPath();
     const serverPath = await getServerPath();
@@ -3387,7 +3388,7 @@ router.post("/repair-map-entries", async (req, res) => {
 });
 
 // Deduplicate mod IDs in the Mods= line — removes exact duplicates, keeps one of each
-router.post("/deduplicate-mod-ids", async (req, res) => {
+router.post("/deduplicate-mod-ids", requireRole("admin"), async (req, res) => {
   try {
     const serverConfigPath = await getServerConfigPath();
     const serverName = await getServerName();
@@ -3470,7 +3471,7 @@ router.post("/deduplicate-mod-ids", async (req, res) => {
 });
 
 // ─── Missing Dependencies: Add a resolved dependency to INI ─────────────────
-router.post("/add-missing-dep", async (req, res) => {
+router.post("/add-missing-dep", requireRole("admin"), async (req, res) => {
   try {
     const { workshopId, modId } = req.body;
     if (!workshopId || !/^\d{1,15}$/.test(String(workshopId))) {
@@ -3601,7 +3602,7 @@ router.post("/add-missing-dep", async (req, res) => {
 });
 
 // ─── Missing Dependencies: Batch add all resolved deps ──────────────────────
-router.post("/add-all-resolved-deps", async (req, res) => {
+router.post("/add-all-resolved-deps", requireRole("admin"), async (req, res) => {
   try {
     const { deps } = req.body;
     if (!deps || !Array.isArray(deps) || deps.length === 0) {
@@ -3735,7 +3736,7 @@ router.post("/add-all-resolved-deps", async (req, res) => {
 });
 
 // ─── Missing Dependencies: Search Steam Workshop for a mod by name ──────────
-router.post("/search-workshop-mods", async (req, res) => {
+router.post("/search-workshop-mods", requireRole("admin"), async (req, res) => {
   try {
     const { query, parentName, parentWorkshopId, parentModId } = req.body;
     if (!query || typeof query !== "string" || query.trim().length < 2) {
@@ -4065,7 +4066,7 @@ router.post("/search-workshop-mods", async (req, res) => {
 });
 
 // ─── Missing Dependencies: Auto-resolve all unresolved deps ─────────────────
-router.post("/resolve-missing-deps", async (req, res) => {
+router.post("/resolve-missing-deps", requireRole("admin"), async (req, res) => {
   try {
     const { deps } = req.body;
     if (!deps || !Array.isArray(deps)) {
@@ -4148,7 +4149,7 @@ router.post("/resolve-missing-deps", async (req, res) => {
 });
 
 // ─── Sync mod IDs from Workshop → INI ─────────────────────────────────────
-router.post("/sync-mod-ids", async (req, res) => {
+router.post("/sync-mod-ids", requireRole("admin"), async (req, res) => {
   try {
     const serverConfigPath = await getServerConfigPath();
     const serverName = await getServerName();
@@ -4430,7 +4431,7 @@ router.get("/presets", async (req, res) => {
 });
 
 // Create a mod preset (save current mods as a preset)
-router.post("/presets", async (req, res) => {
+router.post("/presets", requireRole("admin"), async (req, res) => {
   try {
     let { name, description } = req.body;
     if (!name || typeof name !== "string") {
@@ -4488,7 +4489,7 @@ router.post("/presets", async (req, res) => {
 });
 
 // Update a mod preset
-router.put("/presets/:id", async (req, res) => {
+router.put("/presets/:id", requireRole("admin"), async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
@@ -4535,7 +4536,7 @@ router.put("/presets/:id", async (req, res) => {
 });
 
 // Delete a mod preset
-router.delete("/presets/:id", async (req, res) => {
+router.delete("/presets/:id", requireRole("admin"), async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
@@ -4557,7 +4558,7 @@ router.delete("/presets/:id", async (req, res) => {
 });
 
 // Apply a mod preset (load mods from preset)
-router.post("/presets/:id/apply", async (req, res) => {
+router.post("/presets/:id/apply", requireRole("admin"), async (req, res) => {
   try {
     const { id } = req.params;
     const presets = await getModPresets();
@@ -4614,7 +4615,7 @@ router.post("/presets/:id/apply", async (req, res) => {
 });
 
 // Save mod load order
-router.post("/save-order", async (req, res) => {
+router.post("/save-order", requireRole("admin"), async (req, res) => {
   try {
     const { modIds } = req.body;
 
@@ -4668,7 +4669,7 @@ router.post("/save-order", async (req, res) => {
   }
 });
 
-router.post("/discover-mod-ids", async (req, res) => {
+router.post("/discover-mod-ids", requireRole("admin"), async (req, res) => {
   try {
     const { workshopId, workshopUrl } = req.body;
 
@@ -4811,7 +4812,7 @@ router.post("/discover-mod-ids", async (req, res) => {
 });
 
 // Add mod with specific mod IDs selected (for multi-ID mods)
-router.post("/add-mod-advanced", async (req, res) => {
+router.post("/add-mod-advanced", requireRole("admin"), async (req, res) => {
   try {
     const { workshopId, selectedModIds, includeAllModIds } = req.body;
     // workshopId: the Steam Workshop ID
@@ -7168,7 +7169,7 @@ router.get("/disk-only", async (req, res) => {
 // Enable a disk-only mod: append its workshop ID to the INI WorkshopItems=
 // list (and best-effort the corresponding mod IDs to Mods=) so the server
 // loads it on next start. This is the inverse of the existing batch-remove.
-router.post("/enable-disk-mod", async (req, res) => {
+router.post("/enable-disk-mod", requireRole("admin"), async (req, res) => {
   try {
     const { workshopId } = req.body || {};
     const wsId = String(workshopId || "");
@@ -7343,7 +7344,7 @@ async function deleteModFromDiskAndIni(wsId) {
 // strips the workshop ID + any of its mod-folder IDs from the server INI
 // so the server won't try to load it on next start. Used by the "Disabled
 // mods on disk" and "Ignored mods" panels in the Mods page UI.
-router.post("/delete-disk-mod", async (req, res) => {
+router.post("/delete-disk-mod", requireRole("admin"), async (req, res) => {
   try {
     const { workshopId } = req.body || {};
     const wsId = String(workshopId || "");
@@ -7415,7 +7416,7 @@ router.post("/delete-disk-mod", async (req, res) => {
 // ignore-listed so a later scan can't quietly re-add it. The collection step
 // is reported separately because it is the only one that can fail for a
 // reason the user can fix (missing Steam cookies).
-router.post("/purge", async (req, res) => {
+router.post("/purge", requireRole("admin"), async (req, res) => {
   try {
     const wsId = String(req.body?.workshopId || "").trim();
     if (!/^\d{1,15}$/.test(wsId)) {
@@ -7494,7 +7495,7 @@ router.post("/purge", async (req, res) => {
   }
 });
 
-router.post("/batch-delete-disk-mods", async (req, res) => {
+router.post("/batch-delete-disk-mods", requireRole("admin"), async (req, res) => {
   try {
     const { workshopIds } = req.body || {};
     if (!Array.isArray(workshopIds) || workshopIds.length === 0) {
@@ -7626,7 +7627,7 @@ router.post("/batch-delete-disk-mods", async (req, res) => {
 //   - ignored OR folder missing on disk  → drop from WorkshopItems=
 //   - folder present on disk             → resolve its mod IDs and add to Mods=
 // One INI write for the whole batch. Returns a per-ID breakdown.
-router.post("/resolve-orphan-workshop", async (req, res) => {
+router.post("/resolve-orphan-workshop", requireRole("admin"), async (req, res) => {
   try {
     const { workshopIds } = req.body || {};
     if (!Array.isArray(workshopIds) || workshopIds.length === 0) {

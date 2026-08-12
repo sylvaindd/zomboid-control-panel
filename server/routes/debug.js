@@ -37,6 +37,7 @@ import {
   getCandidateZomboidPaths,
   inspectZomboidPath,
 } from "../utils/zomboidPaths.js";
+import { requireRole } from "../services/auth.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1139,7 +1140,7 @@ router.get("/logs/download/:filename", async (req, res) => {
 });
 
 // Clear in-memory log buffer
-router.post("/logs/clear", async (req, res) => {
+router.post("/logs/clear", requireRole("admin"), async (req, res) => {
   try {
     log.info("POST /logs/clear");
     logBuffer.length = 0;
@@ -1150,7 +1151,7 @@ router.post("/logs/clear", async (req, res) => {
 });
 
 // Update data paths (database and logs location)
-router.post("/paths", async (req, res) => {
+router.post("/paths", requireRole("admin"), async (req, res) => {
   try {
     const { dataDir, logsDir, moveFiles } = req.body;
 
@@ -4042,7 +4043,7 @@ router.get("/performance-history", async (req, res) => {
 });
 
 // Record current performance snapshot (called periodically)
-router.post("/performance-snapshot", async (req, res) => {
+router.post("/performance-snapshot", requireRole("admin"), async (req, res) => {
   try {
     const { memoryUsed, memoryTotal, cpuUsage, playerCount, serverRunning } =
       req.body || {};
@@ -4086,7 +4087,7 @@ router.get("/database", async (req, res) => {
 });
 
 // Create manual database backup
-router.post("/database/backup", async (req, res) => {
+router.post("/database/backup", requireRole("admin"), async (req, res) => {
   try {
     log.info("POST /database/backup");
     const result = await createDatabaseBackup();
@@ -4098,7 +4099,7 @@ router.post("/database/backup", async (req, res) => {
 });
 
 // Compact database (apply retention policies)
-router.post("/database/compact", async (req, res) => {
+router.post("/database/compact", requireRole("admin"), async (req, res) => {
   try {
     log.info("POST /database/compact");
     const result = await compactDatabase();
@@ -4113,7 +4114,7 @@ router.post("/database/compact", async (req, res) => {
 // while the server is still alive so we don't yank a lock the JVM still
 // holds open. Only deletes files older than 1 hour (matches the
 // diagnostics threshold in scanSaveStats).
-router.post("/clear-stale-locks", async (req, res) => {
+router.post("/clear-stale-locks", requireRole("admin"), async (req, res) => {
   try {
     log.info("POST /clear-stale-locks");
     const serverManager = req.app.get("serverManager");
@@ -4394,7 +4395,7 @@ const CLIENT_ERROR_MAX = 30; // max reports per minute per IP
 // left a permanent entry. Sweep expired ones once the map gets large.
 const CLIENT_ERROR_RATE_MAX_ENTRIES = 5000;
 
-router.post("/client-errors", (req, res) => {
+router.post("/client-errors", requireRole("admin"), (req, res) => {
   try {
     // Simple per-IP rate limit to prevent abuse
     const ip = req.ip || "unknown";

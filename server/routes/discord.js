@@ -2,6 +2,7 @@ import express from "express";
 import { createLogger } from "../utils/logger.js";
 import { sanitizeError } from "../utils/sanitize.js";
 import { normalizeChatRelayScope } from "../services/discordBot.js";
+import { requireRole } from "../services/auth.js";
 const log = createLogger("API:Discord");
 
 const router = express.Router();
@@ -59,7 +60,7 @@ router.get("/config", async (req, res) => {
 });
 
 // Update Discord bot config
-router.put("/config", async (req, res) => {
+router.put("/config", requireRole("admin"), async (req, res) => {
   try {
     const {
       token,
@@ -181,7 +182,7 @@ router.put("/config", async (req, res) => {
 });
 
 // Start Discord bot
-router.post("/start", async (req, res) => {
+router.post("/start", requireRole("admin"), async (req, res) => {
   try {
     log.info("POST /start — starting Discord bot");
     const discordBot = req.app.get("discordBot");
@@ -209,7 +210,7 @@ router.post("/start", async (req, res) => {
 });
 
 // Stop Discord bot
-router.post("/stop", async (req, res) => {
+router.post("/stop", requireRole("admin"), async (req, res) => {
   try {
     const discordBot = req.app.get("discordBot");
     if (!discordBot) {
@@ -229,7 +230,7 @@ router.post("/stop", async (req, res) => {
 });
 
 // Reset Discord bot configuration
-router.post("/reset", async (req, res) => {
+router.post("/reset", requireRole("admin"), async (req, res) => {
   try {
     const discordBot = req.app.get("discordBot");
     if (!discordBot) {
@@ -248,7 +249,7 @@ router.post("/reset", async (req, res) => {
 });
 
 // Test Discord connection
-router.post("/test", async (req, res) => {
+router.post("/test", requireRole("admin"), async (req, res) => {
   try {
     const { token } = req.body || {};
 
@@ -300,7 +301,7 @@ router.post("/test", async (req, res) => {
 });
 
 // Send test message
-router.post("/test-message", async (req, res) => {
+router.post("/test-message", requireRole("admin"), async (req, res) => {
   try {
     const discordBot = req.app.get("discordBot");
 
@@ -378,7 +379,7 @@ router.get("/webhook-events", async (req, res) => {
 });
 
 // Update webhook events configuration
-router.put("/webhook-events", async (req, res) => {
+router.put("/webhook-events", requireRole("admin"), async (req, res) => {
   try {
     const discordBot = req.app.get("discordBot");
     if (!discordBot) {
@@ -445,7 +446,7 @@ router.get("/permissions", async (req, res) => {
 });
 
 // Update command permissions
-router.put("/permissions", async (req, res) => {
+router.put("/permissions", requireRole("admin"), async (req, res) => {
   try {
     const discordBot = req.app.get("discordBot");
     if (!discordBot) {

@@ -73,7 +73,7 @@ router.get("/:name/snapshot", requireRole("admin"), async (req, res) => {
 });
 
 // Update backup settings
-router.post("/settings", async (req, res) => {
+router.post("/settings", requireRole("admin"), async (req, res) => {
   try {
     const backupService = req.app.get("backupService");
     const scheduler = req.app.get("scheduler");
@@ -107,7 +107,7 @@ router.post("/settings", async (req, res) => {
 });
 
 // Create a manual backup
-router.post("/create", async (req, res) => {
+router.post("/create", requireRole("admin"), async (req, res) => {
   try {
     log.info("POST /create — creating manual backup");
     const activeServer = await getActiveServer();

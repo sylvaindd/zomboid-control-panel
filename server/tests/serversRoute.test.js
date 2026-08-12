@@ -38,7 +38,10 @@ function getLayer(routePath, method) {
 }
 
 function getCreateHandler() {
-  return getLayer("/", "post").route.stack[0].handle;
+  const layer = getLayer("/", "post");
+  // POST / is admin-gated now, so its first stack entry is requireRole. These
+  // tests exercise creation logic; the gate itself is asserted via runRoute.
+  return layer.route.stack[layer.route.stack.length - 1].handle;
 }
 
 function getUpdateHandler() {

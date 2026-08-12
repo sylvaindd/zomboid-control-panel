@@ -150,31 +150,38 @@ router.get("/", async (req, res) => {
 });
 
 // Update server configuration
-router.put("/", requireStoppedForLocalConfigMutation, async (req, res) => {
-  try {
-    log.info("PUT /config — saving server config");
-    const serverManager = req.app.get("serverManager");
-    const { config } = req.body;
+router.put(
+  "/",
+  requireRole("admin"),
+  requireStoppedForLocalConfigMutation,
+  async (req, res) => {
+    try {
+      log.info("PUT /config — saving server config");
+      const serverManager = req.app.get("serverManager");
+      const { config } = req.body;
 
-    if (!config) {
-      return res.status(400).json({ error: "Config is required" });
-    }
+      if (!config) {
+        return res.status(400).json({ error: "Config is required" });
+      }
 
-    const saved = await serverManager.saveServerConfig(config);
-    if (!saved?.success) {
-      return res.status(500).json({
-        error: sanitizeError(saved?.error || "Configuration could not be written"),
-      });
+      const saved = await serverManager.saveServerConfig(config);
+      if (!saved?.success) {
+        return res.status(500).json({
+          error: sanitizeError(
+            saved?.error || "Configuration could not be written",
+          ),
+        });
+      }
+      res.json({ success: true, message: "Configuration saved" });
+    } catch (error) {
+      log.error(`Failed to save config: ${error.message}`);
+      res.status(500).json({ error: sanitizeError(error.message) });
     }
-    res.json({ success: true, message: "Configuration saved" });
-  } catch (error) {
-    log.error(`Failed to save config: ${error.message}`);
-    res.status(500).json({ error: sanitizeError(error.message) });
-  }
-});
+  },
+);
 
 // Reload server options via RCON
-router.post("/reload", async (req, res) => {
+router.post("/reload", requireRole("admin"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const result = await rconService.reloadOptions();
@@ -198,7 +205,7 @@ router.get("/options", async (req, res) => {
 });
 
 // Change a specific option via RCON
-router.post("/option", async (req, res) => {
+router.post("/option", requireRole("admin"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const { name, value } = req.body;
@@ -448,7 +455,7 @@ router.get("/cors-debug", async (req, res) => {
   }
 });
 
-router.post("/cors-debug/reload", async (req, res) => {
+router.post("/cors-debug/reload", requireRole("admin"), async (req, res) => {
   try {
     const refreshCorsConfig = req.app.get("refreshCorsConfig");
     if (typeof refreshCorsConfig !== "function") {
@@ -464,7 +471,7 @@ router.post("/cors-debug/reload", async (req, res) => {
   }
 });
 
-router.delete("/cors-debug/blocked", async (req, res) => {
+router.delete("/cors-debug/blocked", requireRole("admin"), async (req, res) => {
   try {
     const clearCorsBlockedOrigins = req.app.get("clearCorsBlockedOrigins");
     const getCorsDebugSnapshot = req.app.get("getCorsDebugSnapshot");
@@ -503,7 +510,7 @@ router.get("/paths", async (req, res) => {
 });
 
 // Update paths (runtime only - doesn't persist to .env)
-router.put("/paths", async (req, res) => {
+router.put("/paths", requireRole("admin"), async (req, res) => {
   try {
     const serverManager = req.app.get("serverManager");
     const { serverPath, savePath } = req.body;
@@ -553,7 +560,7 @@ const RCON_HOST_REGEX = /^[a-zA-Z0-9.-]{1,255}$/;
 const RCON_PASSWORD_MAX_LENGTH = 256;
 
 // Update RCON configuration
-router.put("/rcon", async (req, res) => {
+router.put("/rcon", requireRole("admin"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const { host, port, password } = req.body;
@@ -595,7 +602,7 @@ router.put("/rcon", async (req, res) => {
 });
 
 // Test RCON connection
-router.post("/test-rcon", async (req, res) => {
+router.post("/test-rcon", requireRole("admin"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
 
