@@ -2,6 +2,7 @@ import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react'
 import type { Socket } from 'socket.io-client'
 import Layout from './components/Layout'
+import RouteGuard from './components/RouteGuard'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import {
   FeatureErrorBoundary,
@@ -553,27 +554,27 @@ function AppContent() {
           <ScrollToTop />
           <Suspense fallback={<PageLoader />}>
             <Routes>
-              <Route path="/" element={<FeatureErrorBoundary featureName="Dashboard"><Dashboard /></FeatureErrorBoundary>} />
+              <Route path="/" element={<RouteGuard path="/"><FeatureErrorBoundary featureName="Dashboard"><Dashboard /></FeatureErrorBoundary></RouteGuard>} />
               <Route path="/dashboard" element={<Navigate to="/" replace />} />
-              <Route path="/players" element={<FeatureErrorBoundary featureName="Player Management"><Players /></FeatureErrorBoundary>} />
-              <Route path="/console" element={<FeatureErrorBoundary featureName="Console"><Console /></FeatureErrorBoundary>} />
-              <Route path="/scheduler" element={<FeatureErrorBoundary featureName="Scheduler"><Scheduler /></FeatureErrorBoundary>} />
-              <Route path="/mods" element={<FeatureErrorBoundary featureName="Mod Manager"><Mods /></FeatureErrorBoundary>} />
-              <Route path="/templates" element={<FeatureErrorBoundary featureName="Simulation Templates"><Templates /></FeatureErrorBoundary>} />
-              <Route path="/chunks" element={<FeatureErrorBoundary featureName="Chunk Cleaner"><ChunkCleaner /></FeatureErrorBoundary>} />
+              <Route path="/players" element={<RouteGuard path="/players"><FeatureErrorBoundary featureName="Player Management"><Players /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/console" element={<RouteGuard path="/console"><FeatureErrorBoundary featureName="Console"><Console /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/scheduler" element={<RouteGuard path="/scheduler"><FeatureErrorBoundary featureName="Scheduler"><Scheduler /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/mods" element={<RouteGuard path="/mods"><FeatureErrorBoundary featureName="Mod Manager"><Mods /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/templates" element={<RouteGuard path="/templates"><FeatureErrorBoundary featureName="Simulation Templates"><Templates /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/chunks" element={<RouteGuard path="/chunks"><FeatureErrorBoundary featureName="Chunk Cleaner"><ChunkCleaner /></FeatureErrorBoundary></RouteGuard>} />
               <Route path="/chunk-cleaner" element={<Navigate to="/chunks" replace />} />
-              <Route path="/discord" element={<FeatureErrorBoundary featureName="Discord Integration"><Discord /></FeatureErrorBoundary>} />
-              <Route path="/settings" element={<FeatureErrorBoundary featureName="Settings"><Settings /></FeatureErrorBoundary>} />
-              <Route path="/server-setup" element={<FeatureErrorBoundary featureName="Server Setup"><ServerSetup /></FeatureErrorBoundary>} />
-              <Route path="/servers" element={<FeatureErrorBoundary featureName="Server Manager"><Servers /></FeatureErrorBoundary>} />
-              <Route path="/server-config" element={<FeatureErrorBoundary featureName="Server Configuration"><ServerConfig /></FeatureErrorBoundary>} />
+              <Route path="/discord" element={<RouteGuard path="/discord"><FeatureErrorBoundary featureName="Discord Integration"><Discord /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/settings" element={<RouteGuard path="/settings"><FeatureErrorBoundary featureName="Settings"><Settings /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/server-setup" element={<RouteGuard path="/server-setup"><FeatureErrorBoundary featureName="Server Setup"><ServerSetup /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/servers" element={<RouteGuard path="/servers"><FeatureErrorBoundary featureName="Server Manager"><Servers /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/server-config" element={<RouteGuard path="/server-config"><FeatureErrorBoundary featureName="Server Configuration"><ServerConfig /></FeatureErrorBoundary></RouteGuard>} />
               <Route path="/serverconfig" element={<Navigate to="/server-config" replace />} />
-              <Route path="/server-finder" element={<FeatureErrorBoundary featureName="Server Finder"><ServerFinder /></FeatureErrorBoundary>} />
-              <Route path="/debug" element={<FeatureErrorBoundary featureName="Debug"><Debug /></FeatureErrorBoundary>} />
-              <Route path="/events" element={<FeatureErrorBoundary featureName="Events & Weather"><Events /></FeatureErrorBoundary>} />
-              <Route path="/world-map" element={<FeatureErrorBoundary featureName="World Map"><WorldMap /></FeatureErrorBoundary>} />
-              <Route path="/chat" element={<FeatureErrorBoundary featureName="In-Game Chat"><Chat /></FeatureErrorBoundary>} />
-              <Route path="/backups" element={<FeatureErrorBoundary featureName="Backups"><Backups /></FeatureErrorBoundary>} />
+              <Route path="/server-finder" element={<RouteGuard path="/server-finder"><FeatureErrorBoundary featureName="Server Finder"><ServerFinder /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/debug" element={<RouteGuard path="/debug"><FeatureErrorBoundary featureName="Debug"><Debug /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/events" element={<RouteGuard path="/events"><FeatureErrorBoundary featureName="Events & Weather"><Events /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/world-map" element={<RouteGuard path="/world-map"><FeatureErrorBoundary featureName="World Map"><WorldMap /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/chat" element={<RouteGuard path="/chat"><FeatureErrorBoundary featureName="In-Game Chat"><Chat /></FeatureErrorBoundary></RouteGuard>} />
+              <Route path="/backups" element={<RouteGuard path="/backups"><FeatureErrorBoundary featureName="Backups"><Backups /></FeatureErrorBoundary></RouteGuard>} />
               <Route path="*" element={<NotFoundRoute />} />
             </Routes>
           </Suspense>

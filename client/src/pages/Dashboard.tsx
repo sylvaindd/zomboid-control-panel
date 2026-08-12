@@ -22,6 +22,7 @@ import {
 import { formatUptime } from '@/lib/utils'
 import { useSocket } from '@/contexts/SocketContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { canAccessPath } from '@/lib/routeAccess'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { cn, copyText } from '@/lib/utils'
@@ -690,7 +691,7 @@ export default function Dashboard() {
 
   const errorCount = maintenance.errorCount
 
-  const workItems: WorkItem[] = [
+  const allWorkItems: WorkItem[] = [
     {
       to: '/players', icon: Activity, label: 'Players',
       state: online ? String(players.length) : 'offline',
@@ -723,6 +724,11 @@ export default function Dashboard() {
     },
     { to: '/server-config', icon: Server, label: 'Config' },
   ]
+  // Drop shortcuts to pages this role cannot open — the route guard would
+  // refuse them anyway, so offering the tile is just a dead end.
+  const workItems = allWorkItems.filter(item =>
+    canAccessPath(item.to, { isAdmin, can }),
+  )
 
   /* ====================================================================== */
   /*  RENDER                                                                  */

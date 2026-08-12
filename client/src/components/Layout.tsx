@@ -40,6 +40,7 @@ import { serversApi, ServerInstance, updateApi, UpdateStatus, serverApi, modsApi
 import { SocketContext } from '@/contexts/SocketContext'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { canAccessPath } from '@/lib/routeAccess'
 import { useToast } from '@/components/ui/use-toast'
 import {
   DropdownMenu,
@@ -67,12 +68,11 @@ interface NavItem {
   allowRemoteConfigMirror?: boolean
   disabled?: boolean
   badge?: string
-  // Permanently admin-only surface — every mutating route behind it is
-  // requireRole("admin") and is not operator-configurable.
-  adminOnly?: boolean
-  // Gated on an operator-configurable capability instead, so lowering the tier
-  // in Settings > Users & roles reveals the entry.
-  capability?: string
+  // Reachable by non-admins but deliberately kept out of their sidebar.
+  // Only /settings uses this: the page itself must stay open so anyone can
+  // change their own password, but it is an admin surface otherwise, so
+  // non-admins get to it from the footer key icon instead of a nav entry.
+  navAdminOnly?: boolean
 }
 
 interface NavSection {
@@ -102,7 +102,7 @@ const navSections: NavSection[] = [
     icon: Zap,
     color: 'amber',
     items: [
-      { to: '/events', icon: Zap, label: 'Events & Weather', capability: 'world.environment' },
+      { to: '/events', icon: Zap, label: 'Events & Weather' },
       { to: '/world-map', icon: Map, label: 'World Map' },
     ]
   },
@@ -112,9 +112,9 @@ const navSections: NavSection[] = [
     icon: FileCog,
     color: 'blue',
     items: [
-      { to: '/server-config', icon: FileCog, label: 'Server Configuration', requiresLocal: true, allowRemoteConfigMirror: true, adminOnly: true },
-      { to: '/mods', icon: Package, label: 'Mod Manager', requiresLocal: true, adminOnly: true },
-      { to: '/templates', icon: LayoutTemplate, label: 'Templates', requiresLocal: true, allowRemoteConfigMirror: true, adminOnly: true },
+      { to: '/server-config', icon: FileCog, label: 'Server Configuration', requiresLocal: true, allowRemoteConfigMirror: true },
+      { to: '/mods', icon: Package, label: 'Mod Manager', requiresLocal: true },
+      { to: '/templates', icon: LayoutTemplate, label: 'Templates', requiresLocal: true, allowRemoteConfigMirror: true },
     ]
   },
   {
@@ -123,9 +123,9 @@ const navSections: NavSection[] = [
     icon: Clock,
     color: 'purple',
     items: [
-      { to: '/scheduler', icon: Clock, label: 'Scheduled Tasks', capability: 'scheduler.manage' },
-      { to: '/backups', icon: Archive, label: 'World Backups', requiresLocal: true, adminOnly: true },
-      { to: '/chunks', icon: Eraser, label: 'Map Cleanup', requiresLocal: true, adminOnly: true },
+      { to: '/scheduler', icon: Clock, label: 'Scheduled Tasks' },
+      { to: '/backups', icon: Archive, label: 'World Backups', requiresLocal: true },
+      { to: '/chunks', icon: Eraser, label: 'Map Cleanup', requiresLocal: true },
     ]
   },
   {
@@ -134,9 +134,9 @@ const navSections: NavSection[] = [
     icon: Server,
     color: 'cyan',
     items: [
-      { to: '/servers', icon: Layers, label: 'My Servers', adminOnly: true },
-      { to: '/server-setup', icon: Download, label: 'Server Setup', adminOnly: true },
-      { to: '/server-finder', icon: Search, label: 'Browse Public', adminOnly: true },
+      { to: '/servers', icon: Layers, label: 'My Servers' },
+      { to: '/server-setup', icon: Download, label: 'Server Setup' },
+      { to: '/server-finder', icon: Search, label: 'Browse Public' },
     ]
   },
   {
@@ -145,9 +145,9 @@ const navSections: NavSection[] = [
     icon: Settings,
     color: 'slate',
     items: [
-      { to: '/discord', icon: MessageSquare, label: 'Discord', adminOnly: true },
-      { to: '/settings', icon: Settings, label: 'Panel Settings', adminOnly: true },
-      { to: '/debug', icon: Bug, label: 'Debug Logs', adminOnly: true },
+      { to: '/discord', icon: MessageSquare, label: 'Discord' },
+      { to: '/settings', icon: Settings, label: 'Panel Settings', navAdminOnly: true },
+      { to: '/debug', icon: Bug, label: 'Debug Logs' },
     ]
   },
 ]
@@ -295,20 +295,20 @@ export default function Layout({ children }: LayoutProps) {
 
   const { can, isAdmin } = useAuth()
 
-  // Hide what the current role cannot use. Every route behind these entries is
-  // already gated server-side; this only stops the sidebar advertising pages
-  // that would answer 403 on arrival. A section whose items are all hidden
-  // disappears entirely rather than rendering an empty group header.
+  // Hide what the current role cannot open. Visibility comes from the shared
+  // ROUTE_ACCESS table that also guards the router, so the sidebar and the
+  // routes can't drift apart. A section whose items are all hidden disappears
+  // entirely rather than rendering an empty group header.
   const visibleSections = useMemo(
     () =>
       navSections
         .map(section => ({
           ...section,
-          items: section.items.filter(item => {
-            if (item.adminOnly) return isAdmin
-            if (item.capability) return can(item.capability)
-            return true
-          }),
+          items: section.items.filter(
+            item =>
+              canAccessPath(item.to, { isAdmin, can }) &&
+              (!item.navAdminOnly || isAdmin),
+          ),
         }))
         .filter(section => section.items.length > 0),
     [can, isAdmin],
