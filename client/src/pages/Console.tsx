@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { rconApi, configApi, serverApi, serversApi, type ServerInstance } from '@/lib/api'
 import { useSocket } from '@/contexts/SocketContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
 import { cn } from '@/lib/utils'
@@ -229,10 +230,15 @@ export default function Console() {
   const [serverLogPaused, setServerLogPaused] = useState(false)
   const [serverLogFiltered, setServerLogFiltered] = useState(true) // Filter out noise by default
   const [consoleTab, setConsoleTab] = useState('server-log')
+  // The RCON console runs arbitrary commands, so it follows the configurable
+  // rcon.execute capability (admin by default) rather than being shown to
+  // everyone who can read the server log.
+  const { can } = useAuth()
+  const canUseRcon = can('rcon.execute')
 
   // Console keyboard shortcuts
   usePageShortcut('a', () => setServerLogAutoScroll(prev => !prev))
-  usePageShortcut('`', () => setConsoleTab(prev => prev === 'server-log' ? 'rcon' : 'server-log'))
+  usePageShortcut('`', () => setConsoleTab(prev => (canUseRcon && prev === 'server-log') ? 'rcon' : 'server-log'))
   const serverLogRef = useRef<HTMLDivElement>(null)
   const serverLogIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const serverLogSizeRef = useRef(0) // Track size without recreating interval
@@ -666,8 +672,8 @@ export default function Console() {
         tone="ops"
         icon={<TerminalIcon className="w-5 h-5" />}
       />
-      <Tabs value={consoleTab} onValueChange={setConsoleTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 bg-muted/30 border border-border/50 rounded-md p-0.5">
+      <Tabs value={canUseRcon ? consoleTab : 'server-log'} onValueChange={setConsoleTab} className="w-full">
+        <TabsList className={cn('grid w-full bg-muted/30 border border-border/50 rounded-md p-0.5', canUseRcon ? 'grid-cols-2' : 'grid-cols-1')}>
           <TabsTrigger
             value="server-log"
             className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none rounded-sm"
@@ -675,13 +681,15 @@ export default function Console() {
             <FileText className="w-3.5 h-3.5" />
             server log
           </TabsTrigger>
-          <TabsTrigger
-            value="rcon"
-            className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none rounded-sm"
-          >
-            <TerminalIcon className="w-3.5 h-3.5" />
-            rcon console
-          </TabsTrigger>
+          {canUseRcon && (
+            <TabsTrigger
+              value="rcon"
+              className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none rounded-sm"
+            >
+              <TerminalIcon className="w-3.5 h-3.5" />
+              rcon console
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Server Console Log Tab */}
@@ -844,8 +852,9 @@ export default function Console() {
           )}
         </TabsContent>
 
-        {/* RCON Console Tab */}
-        <TabsContent value="rcon" className="space-y-3 mt-4">
+          {/* RCON Console Tab */}
+          {canUseRcon && (
+          <TabsContent value="rcon" className="space-y-3 mt-4">
           <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md border border-border/50 bg-card/70 backdrop-blur-sm">
             <div className="flex items-center gap-2 min-w-0">
               <span className="font-mono text-[9px] uppercase tracking-[0.24em] text-primary/60 shrink-0">link</span>
@@ -1184,9 +1193,10 @@ export default function Console() {
                 </ScrollArea>
               </div>
             )}
-          </div>
-        </TabsContent>
-      </Tabs>
-    </div>
-  )
+            </div>
+          </TabsContent>
+          )}
+        </Tabs>
+      </div>
+    )
 }

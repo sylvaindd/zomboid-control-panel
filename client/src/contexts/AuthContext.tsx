@@ -20,9 +20,17 @@ interface AuthContextType extends AuthState {
   setup: (username: string, password: string, rememberMe?: boolean) => Promise<void>
   logout: () => Promise<void>
   getToken: () => string | null
+  /** True when the signed-in role satisfies an operator-configurable capability. */
+  can: (capability: string) => boolean
+  /** True for permanently admin-only surfaces (mods, files, config, Discord, debug…). */
+  isAdmin: boolean
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
+
+// Mirrors ROLE_RANK in server/services/auth.js — a role satisfies a
+// requirement when its rank is >= the required rank.
+const ROLE_RANK: Record<string, number> = { viewer: 0, moderator: 1, admin: 2 }
 
 const CORS_LOGIN_MESSAGE = 'Connection blocked by browser origin policy. For first-time reverse-proxy setup, set CORS_ORIGINS to this URL in the panel environment and restart it. Otherwise open the panel from a local/LAN address; after setup, manage origins in Settings > Remote Access.'
 
@@ -53,6 +61,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     needsSetup: false,
     authEnabled: true,
   })
+
+  // Capability -> minimum role, as configured in Settings > Users & roles.
+  // Used only to hide controls the current role cannot use; the server stays
+  // the enforcement boundary.
+  const [permissions, setPermissions] = useState<Record<string, string>>({})
 
   // Get stored token
   const getToken = useCallback((): string | null => {
@@ -144,6 +157,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth()
   }, [checkAuth])
 
+  // Readable by any signed-in account, so this works for viewers and
+  // moderators too — not just admins.
+  useEffect(() => {
+    if (!state.isAuthenticated || !state.authEnabled) return
+    let cancelled = false
+    const token = getAccessToken()
+    fetch('/api/auth/permissions', {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!cancelled && data?.permissions) setPermissions(data.permissions)
+      })
+      .catch(() => {
+        // Leaving the table empty makes can() fall back to admin-only, which
+        // hides more than necessary rather than showing something the server
+        // would reject.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [state.isAuthenticated, state.authEnabled])
+
+  const isAdmin = !state.authEnabled || state.user?.role === 'admin'
+
+  const can = useCallback(
+    (capability: string): boolean => {
+      // Auth disabled: the server waves every request through, so mirror it.
+      if (!state.authEnabled) return true
+      const role = state.user?.role
+      if (!role) return false
+      // Before the table arrives, assume the strictest tier so a control never
+      // flashes into view and then 403s on click.
+      const required = permissions[capability] ?? 'admin'
+      return (ROLE_RANK[role] ?? -1) >= (ROLE_RANK[required] ?? ROLE_RANK.admin)
+    },
+    [state.authEnabled, state.user?.role, permissions],
+  )
+
   const login = useCallback(async (username: string, password: string, rememberMe = true) => {
     try {
       const res = await fetch('/api/auth/login', {
@@ -211,7 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={useMemo(() => ({ ...state, login, setup, logout, getToken }), [state, login, setup, logout, getToken])}>
+    <AuthContext.Provider value={useMemo(() => ({ ...state, login, setup, logout, getToken, can, isAdmin }), [state, login, setup, logout, getToken, can, isAdmin])}>
       {children}
     </AuthContext.Provider>
   )

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { useEffect, useState, useContext } from 'react'
+import { useEffect, useState, useContext, useMemo } from 'react'
 import {
   LayoutDashboard,
   Gauge,
@@ -30,7 +30,8 @@ import {
   Coffee,
   PanelLeftClose,
   PanelLeft,
-  LogOut
+  LogOut,
+  KeyRound
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ConnectionStatus } from './ConnectionStatus'
@@ -66,6 +67,12 @@ interface NavItem {
   allowRemoteConfigMirror?: boolean
   disabled?: boolean
   badge?: string
+  // Permanently admin-only surface — every mutating route behind it is
+  // requireRole("admin") and is not operator-configurable.
+  adminOnly?: boolean
+  // Gated on an operator-configurable capability instead, so lowering the tier
+  // in Settings > Users & roles reveals the entry.
+  capability?: string
 }
 
 interface NavSection {
@@ -95,7 +102,7 @@ const navSections: NavSection[] = [
     icon: Zap,
     color: 'amber',
     items: [
-      { to: '/events', icon: Zap, label: 'Events & Weather' },
+      { to: '/events', icon: Zap, label: 'Events & Weather', capability: 'world.environment' },
       { to: '/world-map', icon: Map, label: 'World Map' },
     ]
   },
@@ -105,9 +112,9 @@ const navSections: NavSection[] = [
     icon: FileCog,
     color: 'blue',
     items: [
-      { to: '/server-config', icon: FileCog, label: 'Server Configuration', requiresLocal: true, allowRemoteConfigMirror: true },
-      { to: '/mods', icon: Package, label: 'Mod Manager', requiresLocal: true },
-      { to: '/templates', icon: LayoutTemplate, label: 'Templates', requiresLocal: true, allowRemoteConfigMirror: true },
+      { to: '/server-config', icon: FileCog, label: 'Server Configuration', requiresLocal: true, allowRemoteConfigMirror: true, adminOnly: true },
+      { to: '/mods', icon: Package, label: 'Mod Manager', requiresLocal: true, adminOnly: true },
+      { to: '/templates', icon: LayoutTemplate, label: 'Templates', requiresLocal: true, allowRemoteConfigMirror: true, adminOnly: true },
     ]
   },
   {
@@ -116,9 +123,9 @@ const navSections: NavSection[] = [
     icon: Clock,
     color: 'purple',
     items: [
-      { to: '/scheduler', icon: Clock, label: 'Scheduled Tasks' },
-      { to: '/backups', icon: Archive, label: 'World Backups', requiresLocal: true },
-      { to: '/chunks', icon: Eraser, label: 'Map Cleanup', requiresLocal: true },
+      { to: '/scheduler', icon: Clock, label: 'Scheduled Tasks', capability: 'scheduler.manage' },
+      { to: '/backups', icon: Archive, label: 'World Backups', requiresLocal: true, adminOnly: true },
+      { to: '/chunks', icon: Eraser, label: 'Map Cleanup', requiresLocal: true, adminOnly: true },
     ]
   },
   {
@@ -127,9 +134,9 @@ const navSections: NavSection[] = [
     icon: Server,
     color: 'cyan',
     items: [
-      { to: '/servers', icon: Layers, label: 'My Servers' },
-      { to: '/server-setup', icon: Download, label: 'Server Setup' },
-      { to: '/server-finder', icon: Search, label: 'Browse Public' },
+      { to: '/servers', icon: Layers, label: 'My Servers', adminOnly: true },
+      { to: '/server-setup', icon: Download, label: 'Server Setup', adminOnly: true },
+      { to: '/server-finder', icon: Search, label: 'Browse Public', adminOnly: true },
     ]
   },
   {
@@ -138,9 +145,9 @@ const navSections: NavSection[] = [
     icon: Settings,
     color: 'slate',
     items: [
-      { to: '/discord', icon: MessageSquare, label: 'Discord' },
-      { to: '/settings', icon: Settings, label: 'Panel Settings' },
-      { to: '/debug', icon: Bug, label: 'Debug Logs' },
+      { to: '/discord', icon: MessageSquare, label: 'Discord', adminOnly: true },
+      { to: '/settings', icon: Settings, label: 'Panel Settings', adminOnly: true },
+      { to: '/debug', icon: Bug, label: 'Debug Logs', adminOnly: true },
     ]
   },
 ]
@@ -204,7 +211,7 @@ const sectionToneStyles = {
 
 // Auth footer — shows logged-in user and logout button
 function AuthFooter() {
-  const { user, authEnabled, logout } = useAuth()
+  const { user, authEnabled, logout, isAdmin } = useAuth()
 
   if (!authEnabled || !user) return null
 
@@ -212,6 +219,20 @@ function AuthFooter() {
     <span className="inline-flex min-w-0 items-center gap-1.5 text-xs">
       <span className="min-w-0 truncate text-foreground/85 font-medium" title={user.username}>{user.username}</span>
       <span className="shrink-0 text-muted-foreground/50">·</span>
+      {/* Panel Settings is hidden from non-admins, but changing your OWN
+          password is self-service — so keep a way in for them. */}
+      {!isAdmin && (
+        <>
+          <NavLink
+            to="/settings?tab=security"
+            className="shrink-0 text-muted-foreground/70 hover:text-foreground transition-colors"
+            title="Change password"
+          >
+            <KeyRound className="h-3 w-3" />
+          </NavLink>
+          <span className="shrink-0 text-muted-foreground/50">·</span>
+        </>
+      )}
       <button
         type="button"
         onClick={logout}
@@ -271,6 +292,27 @@ export default function Layout({ children }: LayoutProps) {
     !!item.requiresLocal &&
     !!activeServer?.isRemote &&
     !(item.allowRemoteConfigMirror && activeServer.remoteConfigConfigured)
+
+  const { can, isAdmin } = useAuth()
+
+  // Hide what the current role cannot use. Every route behind these entries is
+  // already gated server-side; this only stops the sidebar advertising pages
+  // that would answer 403 on arrival. A section whose items are all hidden
+  // disappears entirely rather than rendering an empty group header.
+  const visibleSections = useMemo(
+    () =>
+      navSections
+        .map(section => ({
+          ...section,
+          items: section.items.filter(item => {
+            if (item.adminOnly) return isAdmin
+            if (item.capability) return can(item.capability)
+            return true
+          }),
+        }))
+        .filter(section => section.items.length > 0),
+    [can, isAdmin],
+  )
   const [servers, setServers] = useState<ServerInstance[]>([])
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true')
@@ -714,7 +756,7 @@ export default function Layout({ children }: LayoutProps) {
           </Tooltip>
 
           {/* Sections */}
-          {navSections.map((section, sectionIdx) => {
+          {visibleSections.map((section, sectionIdx) => {
             const tone = sectionToneStyles[section.color as keyof typeof sectionToneStyles] || sectionToneStyles.slate
             const sectionHasSignal =
               (section.id === 'config' && modUpdatesAvailable > 0) ||
