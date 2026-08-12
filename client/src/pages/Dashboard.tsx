@@ -21,6 +21,7 @@ import {
 } from '@/lib/api'
 import { formatUptime } from '@/lib/utils'
 import { useSocket } from '@/contexts/SocketContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { cn, copyText } from '@/lib/utils'
@@ -152,6 +153,13 @@ function ConnLine({
 /* -------------------------------------------------------------------------- */
 
 export default function Dashboard() {
+  /* --------------------------- authorization ------------------------------ */
+  // Every control below is already gated server-side; these only stop the
+  // dashboard offering buttons the current role would be refused for.
+  const { can, isAdmin } = useAuth()
+  const canLifecycle = can('server.lifecycle')
+  const canSave = can('server.save')
+
   /* ---------------------------- state ------------------------------------- */
   const [status, setStatus] = useState<ServerStatus | null>(null)
   const [players, setPlayers] = useState<Player[]>([])
@@ -586,7 +594,7 @@ export default function Dashboard() {
       return {
         level: 'critical',
         headline: 'Server stopped',
-        action: activeServer?.isRemote
+        action: activeServer?.isRemote || !canLifecycle
           ? undefined
           : {
               label: 'Start server',
@@ -826,6 +834,7 @@ export default function Dashboard() {
           {/* primary controls — right-aligned */}
           <div className="order-2 ml-auto flex flex-wrap justify-end gap-1">
           {!online ? (
+            canLifecycle && (
             <Button
               onClick={() => handleAction('Start server', serverApi.start)}
               disabled={!hasServer || loading !== null || activeServer?.isRemote}
@@ -837,8 +846,11 @@ export default function Dashboard() {
               {loading === 'Start server' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
               Start
             </Button>
+            )
           ) : (
             <>
+              {canLifecycle && (
+              <>
               <Button
                 onClick={() => setConfirmAction({
                   title: 'Stop server',
@@ -885,6 +897,9 @@ export default function Dashboard() {
               >
                 <RotateCcw className="h-3.5 w-3.5" /> Restart
               </Button>
+              </>
+              )}
+              {canSave && (
               <Button
                 onClick={() => handleAction('Save world', serverApi.save)}
                 disabled={loading !== null}
@@ -894,6 +909,7 @@ export default function Dashboard() {
               >
                 <Save className="h-3.5 w-3.5" /> Save
               </Button>
+              )}
             </>
           )}
           <DropdownMenu>
@@ -903,24 +919,31 @@ export default function Dashboard() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => handleAction('Create backup', () => backupApi.createBackup({ includeDb: true }).then(() => fetchMaintenance()))}
-                disabled={!hasServer || loading !== null || activeServer?.isRemote}
-              >
-                <Archive className="mr-2 h-4 w-4" /> Create backup
-              </DropdownMenuItem>
+              {/* Backups, bridge settings, RCON connection and wipe are all
+                  permanently admin-only routes. */}
+              {isAdmin && (
+                <DropdownMenuItem
+                  onClick={() => handleAction('Create backup', () => backupApi.createBackup({ includeDb: true }).then(() => fetchMaintenance()))}
+                  disabled={!hasServer || loading !== null || activeServer?.isRemote}
+                >
+                  <Archive className="mr-2 h-4 w-4" /> Create backup
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={fetchStatus}>
                 <RefreshCw className="mr-2 h-4 w-4" /> Refresh status
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/settings" className="flex items-center"><Server className="mr-2 h-4 w-4" /> Bridge settings</Link>
-              </DropdownMenuItem>
-              {!status?.rcon?.connected && (
+              {isAdmin && (
+                <DropdownMenuItem asChild>
+                  <Link to="/settings" className="flex items-center"><Server className="mr-2 h-4 w-4" /> Bridge settings</Link>
+                </DropdownMenuItem>
+              )}
+              {isAdmin && !status?.rcon?.connected && (
                 <DropdownMenuItem onClick={handleConnect} disabled={!hasServer || loading !== null}>
                   <Wifi className="mr-2 h-4 w-4" /> Connect RCON
                 </DropdownMenuItem>
               )}
-              <DropdownMenuSeparator />
+              {(canLifecycle || isAdmin) && <DropdownMenuSeparator />}
+              {canLifecycle && (
               <DropdownMenuItem
                 onClick={() => setConfirmAction({
                   title: 'Restart server now',
@@ -933,13 +956,16 @@ export default function Dashboard() {
               >
                 <Zap className="mr-2 h-4 w-4" /> Restart now
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => { setWipePreview(null); setWipeDialog(true) }}
-                disabled={!hasServer || online || loading !== null || activeServer?.isRemote}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="mr-2 h-4 w-4" /> Wipe server
-              </DropdownMenuItem>
+              )}
+              {isAdmin && (
+                <DropdownMenuItem
+                  onClick={() => { setWipePreview(null); setWipeDialog(true) }}
+                  disabled={!hasServer || online || loading !== null || activeServer?.isRemote}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" /> Wipe server
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
