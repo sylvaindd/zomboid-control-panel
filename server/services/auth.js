@@ -33,10 +33,53 @@ const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
 const DUMMY_BCRYPT_HASH =
   "$2a$12$CwTycUXWue0Thq9StjUM0uJ8u2H8ekjqOGWjF/9JMlSlL5C.tZgqe";
 
+/**
+ * Account tiers, lowest privilege first. The vocabulary matches the Discord
+ * bot's own three-tier command model (see DEFAULT_COMMAND_PERMISSIONS in
+ * services/discordBot.js) so operators only have to learn one.
+ */
+export const ROLES = ["viewer", "moderator", "admin"];
+
+// Ranked comparison — a role satisfies a requirement when its rank is >= the
+// required rank, so `admin` implicitly passes anything a `moderator` can do.
+const ROLE_RANK = { viewer: 0, moderator: 1, admin: 2 };
+
+// New accounts are read-only until an admin says otherwise.
+export const DEFAULT_ROLE = "viewer";
+
+/**
+ * Capability -> minimum role. Operators retune these from Settings -> Roles.
+ *
+ * Keyed by CAPABILITY, deliberately not by route file: teleport/godmode/
+ * give-item exist in both routes/players.js and routes/panelBridge.js, and
+ * weather/events exist in both routes/server.js and routes/panelBridge.js.
+ * Gating per file would leave the twin route open as a bypass, so both sides
+ * of each pair share one key.
+ *
+ * Anything NOT listed here is hardcoded to `admin` at the route with
+ * requireRole("admin") and is intentionally not operator-configurable —
+ * mods, server files, panel/server config, Discord credentials, backups,
+ * templates, chunk deletion, Docker, debug, and server install/wipe.
+ */
+export const DEFAULT_ROLE_PERMISSIONS = {
+  "players.moderate": "moderator",
+  "players.gm": "moderator",
+  "world.environment": "moderator",
+  "chat.broadcast": "moderator",
+  "server.save": "moderator",
+  "server.lifecycle": "admin",
+  "scheduler.manage": "admin",
+  "rcon.execute": "admin",
+};
+
 class AuthService {
   constructor() {
     this.jwtSecret = null;
     this.initialized = false;
+    // Cached capability -> minimum role map. Held in memory because
+    // requirePermission() consults it on every mutating request; refreshed on
+    // init() and on every updateRolePermissions() write.
+    this.rolePermissions = { ...DEFAULT_ROLE_PERMISSIONS };
     // Serializes setup/createUser to prevent a race where two concurrent
     // /api/auth/setup requests both pass the needsSetup() check.
     this._writeMutex = Promise.resolve();
@@ -151,6 +194,7 @@ class AuthService {
         log.info("Generated new JWT secret");
       }
       this.jwtSecret = secret;
+      await this.loadRolePermissions();
       this.initialized = true;
       log.info("Auth service initialized");
     } catch (error) {
@@ -182,12 +226,20 @@ class AuthService {
   }
 
   /**
-   * Create a new user account (admin)
+   * Create a new user account.
+   *
+   * `role` defaults to the least-privileged tier so a caller that forgets to
+   * pass one cannot accidentally mint an admin. First-run setup passes
+   * "admin" explicitly (see POST /api/auth/setup).
    */
-  async createUser(username, password) {
+  async createUser(username, password, role = DEFAULT_ROLE) {
     return this._withMutex(async () => {
       if (!username || !password) {
         throw new Error("Username and password are required");
+      }
+
+      if (!ROLES.includes(role)) {
+        throw new Error(`Role must be one of: ${ROLES.join(", ")}`);
       }
 
       if (username.length < 3 || username.length > 32) {
@@ -226,7 +278,7 @@ class AuthService {
         id: crypto.randomUUID(),
         username,
         password: hashedPassword,
-        role: "admin",
+        role,
         createdAt: new Date().toISOString(),
         lastLogin: null,
       };
@@ -234,7 +286,7 @@ class AuthService {
       db.data.users.push(user);
       await commitNow();
 
-      log.info(`User created: ${username}`);
+      log.info(`User created: ${username} (role: ${role})`);
       return { id: user.id, username: user.username, role: user.role };
     });
   }
@@ -465,6 +517,131 @@ class AuthService {
     }));
   }
 
+  /**
+   * Change an account's role.
+   *
+   * Refuses to demote the last admin — that would leave the panel with no
+   * account able to reach user management, role settings, or recovery-code
+   * generation, recoverable only by editing the database by hand.
+   */
+  async setUserRole(userId, role) {
+    if (!ROLES.includes(role)) {
+      throw new Error(`Role must be one of: ${ROLES.join(", ")}`);
+    }
+
+    const db = await getDb();
+    const users = db.data.users || [];
+    const user = users.find((u) => u.id === userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (user.role === "admin" && role !== "admin") {
+      const admins = users.filter((u) => u.role === "admin");
+      if (admins.length <= 1) {
+        throw new Error("Cannot demote the last remaining admin account");
+      }
+    }
+
+    user.role = role;
+    // A narrowed role must take effect immediately. Access tokens carry the
+    // role in their payload, so without bumping tokenGen the demoted user
+    // keeps admin power until their 24h token expires.
+    user.tokenGen = (user.tokenGen || 0) + 1;
+    user.refreshSessions = [];
+    await commitNow();
+
+    log.info(`Role changed for ${user.username}: ${role}`);
+    return { id: user.id, username: user.username, role: user.role };
+  }
+
+  /**
+   * Delete an account. Refuses to remove the last admin, for the same
+   * lockout reason as setUserRole().
+   */
+  async deleteUser(userId) {
+    const db = await getDb();
+    const users = db.data.users || [];
+    const user = users.find((u) => u.id === userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (user.role === "admin") {
+      const admins = users.filter((u) => u.role === "admin");
+      if (admins.length <= 1) {
+        throw new Error("Cannot delete the last remaining admin account");
+      }
+    }
+
+    db.data.users = users.filter((u) => u.id !== userId);
+    await commitNow();
+
+    log.info(`User deleted: ${user.username}`);
+    return { id: user.id, username: user.username };
+  }
+
+  /**
+   * Coerce a stored/submitted permission map into a complete, valid one.
+   * Unknown capability keys and unknown tiers are dropped rather than
+   * rejected, so a stale or hand-edited setting degrades to defaults instead
+   * of leaving the panel with an unusable permission table.
+   */
+  _sanitizeRolePermissions(raw) {
+    let parsed = raw;
+    if (typeof raw === "string") {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = null;
+      }
+    }
+
+    const cleaned = {};
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      for (const [key, tier] of Object.entries(parsed)) {
+        if (
+          Object.hasOwn(DEFAULT_ROLE_PERMISSIONS, key) &&
+          ROLES.includes(tier)
+        ) {
+          cleaned[key] = tier;
+        }
+      }
+    }
+
+    return { ...DEFAULT_ROLE_PERMISSIONS, ...cleaned };
+  }
+
+  async loadRolePermissions() {
+    this.rolePermissions = this._sanitizeRolePermissions(
+      await getSetting("rolePermissions"),
+    );
+    return this.getRolePermissions();
+  }
+
+  getRolePermissions() {
+    return { ...this.rolePermissions };
+  }
+
+  async updateRolePermissions(permissions) {
+    if (
+      !permissions ||
+      typeof permissions !== "object" ||
+      Array.isArray(permissions)
+    ) {
+      throw new Error("Permissions object required");
+    }
+
+    this.rolePermissions = this._sanitizeRolePermissions({
+      ...this.getRolePermissions(),
+      ...permissions,
+    });
+    await setSetting("rolePermissions", JSON.stringify(this.rolePermissions));
+
+    log.info("Role permissions updated");
+    return this.getRolePermissions();
+  }
+
   async logout(refreshToken) {
     if (!refreshToken) {
       return false;
@@ -511,10 +688,45 @@ class AuthService {
   }
 
   /**
-   * Reset password for the first admin user (no auth required).
-   * Caller must verify the reset token before calling this.
+   * Resolve which account an out-of-band recovery acts on.
+   *
+   * Recovery proves host access (a token file on disk, or a recovery code
+   * issued while signed in as admin), so it targets an admin account — never
+   * an arbitrary one. Two rules matter once more than one account exists:
+   *
+   *  - Deterministic: the OLDEST admin, not "whichever the array yields", so
+   *    the same recovery always lands on the same account.
+   *  - No `|| users[0]` fallback: if no admin exists, throw rather than
+   *    silently resetting some unrelated viewer's password.
    */
-  async resetPassword(newPassword) {
+  _resolveRecoveryTargetUser(users) {
+    if (users.length === 0) {
+      throw new Error("No user accounts exist. Use setup instead.");
+    }
+
+    const admins = users.filter((u) => u.role === "admin");
+    if (admins.length === 0) {
+      throw new Error(
+        "No admin account exists. Recovery cannot target a non-admin account.",
+      );
+    }
+
+    return admins.reduce((oldest, candidate) => {
+      const oldestAt = Date.parse(oldest.createdAt || "") || 0;
+      const candidateAt = Date.parse(candidate.createdAt || "") || 0;
+      return candidateAt < oldestAt ? candidate : oldest;
+    });
+  }
+
+  /**
+   * Reset an account password out-of-band (no auth required).
+   * Caller must verify the reset token / recovery code before calling this.
+   *
+   * Defaults to the oldest admin. Pass `targetUserId` to act on a specific
+   * account — required for anything that must not silently retarget once
+   * multiple accounts exist.
+   */
+  async resetPassword(newPassword, targetUserId = null) {
     if (
       !newPassword ||
       typeof newPassword !== "string" ||
@@ -528,12 +740,17 @@ class AuthService {
 
     const db = await getDb();
     const users = db.data.users || [];
-    if (users.length === 0) {
-      throw new Error("No user accounts exist. Use setup instead.");
+
+    let user;
+    if (targetUserId !== null) {
+      user = users.find((u) => u.id === targetUserId);
+      if (!user) {
+        throw new Error("User not found");
+      }
+    } else {
+      user = this._resolveRecoveryTargetUser(users);
     }
 
-    // Reset the first admin account
-    const user = users.find((u) => u.role === "admin") || users[0];
     user.password = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     user.tokenGen = (user.tokenGen || 0) + 1;
     user.refreshSessions = [];
@@ -548,12 +765,15 @@ class AuthService {
    *
    * Only the hashes are stored, so a database copy cannot be turned back into
    * usable codes. The plaintext is returned once and never recoverable after.
+   *
+   * These codes redeem into resetPassword(), which targets an admin — so
+   * issuing them is an admin-only action. The route enforces that; without it
+   * a viewer could mint a code and redeem it to seize the admin account.
    */
   async generateRecoveryCodes(count = 10) {
     const db = await getDb();
     const users = db.data.users || [];
-    const user = users.find((u) => u.role === "admin") || users[0];
-    if (!user) throw new Error("No user accounts exist. Use setup instead.");
+    const user = this._resolveRecoveryTargetUser(users);
 
     const codes = [];
     const hashes = [];
@@ -712,16 +932,19 @@ const authService = new AuthService();
 export default authService;
 
 /**
- * Express middleware factory — requires req.user.role to be one of the
- * given roles. Must run AFTER authService.middleware() so req.user is set.
+ * Express middleware factory — requires req.user.role to be exactly one of
+ * the given roles. Must run AFTER authService.middleware() so req.user is set.
  *
- * Currently every account is created with role 'admin' (see createUser()),
- * so this is a no-op today — but every route handler in this app grants
- * full power (RCON god-mode, file delete, server install/wipe, panel
- * self-update) with zero authorization check beyond "is logged in". Wiring
- * this in now on destructive/privileged routes makes that boundary explicit
- * ahead of a non-admin role ever being introduced, instead of every future
- * route inheriting full access by default.
+ * Use this for capabilities that are NOT operator-configurable: mods, server
+ * files, config, Discord credentials, backups, templates, chunk deletion,
+ * Docker, debug, and server install/wipe are all permanently admin-only.
+ * For capabilities the operator can retune from Settings -> Roles, use
+ * requirePermission() instead.
+ *
+ * NOTE: this is useless inside routes/auth.js — authService.middleware()
+ * short-circuits every /api/auth/* path before req.user is ever assigned, so
+ * the `!req.user` escape hatch below would let the request straight through.
+ * Auth routes must resolve the caller themselves.
  */
 export function requireRole(...roles) {
   return (req, res, next) => {
@@ -730,6 +953,37 @@ export function requireRole(...roles) {
     // case, so there's nothing to check here.
     if (!req.user) return next();
     if (roles.includes(req.user.role)) return next();
+    return res.status(403).json({ error: "Insufficient permissions" });
+  };
+}
+
+/**
+ * Express middleware factory for an operator-configurable capability.
+ *
+ * Unlike requireRole(), the required tier is resolved per request from the
+ * live permission table, because an admin can change it at runtime from
+ * Settings -> Roles. Comparison is by rank, so `admin` satisfies a capability
+ * set to `moderator` without having to be listed.
+ *
+ * Unknown capability keys throw at factory time — i.e. at route-registration
+ * during boot — so a typo fails the process loudly instead of registering a
+ * route that silently allows everyone.
+ */
+export function requirePermission(capability) {
+  if (!Object.hasOwn(DEFAULT_ROLE_PERMISSIONS, capability)) {
+    throw new Error(`Unknown permission capability: ${capability}`);
+  }
+
+  return (req, res, next) => {
+    // Same escape hatch as requireRole(): auth disabled or setup pending.
+    if (!req.user) return next();
+
+    const required = authService.getRolePermissions()[capability];
+    const requiredRank = ROLE_RANK[required] ?? ROLE_RANK.admin;
+    // An unrecognised role ranks below everything, so it fails closed.
+    const userRank = ROLE_RANK[req.user.role] ?? -1;
+
+    if (userRank >= requiredRank) return next();
     return res.status(403).json({ error: "Insufficient permissions" });
   };
 }
