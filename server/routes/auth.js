@@ -9,7 +9,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import os from "os";
-import authService from "../services/auth.js";
+import authService, { ROLES, DEFAULT_ROLE } from "../services/auth.js";
 import { createLogger } from "../utils/logger.js";
 import { sanitizeError } from "../utils/sanitize.js";
 import { getDataPaths } from "../utils/paths.js";
@@ -177,6 +177,36 @@ async function getAuthenticatedUser(req) {
   return authService.authenticateAccessToken(authHeader.substring(7));
 }
 
+/**
+ * Resolve the caller and require an admin account.
+ *
+ * This file cannot use requireRole(): authService.middleware() short-circuits
+ * every /api/auth/* path before req.user is assigned, so requireRole()'s
+ * "no req.user means auth is off" escape hatch would wave every request
+ * through. Auth routes must resolve the bearer token themselves.
+ *
+ * Returns the caller on success, or null after having already sent the error
+ * response. When auth is disabled the panel is open by the operator's own
+ * choice, so the check is bypassed and the caller is null.
+ */
+async function resolveAdminCaller(req, res) {
+  if (!(await authService.isAuthEnabled())) {
+    return { authorized: true, user: null };
+  }
+
+  const user = await getAuthenticatedUser(req);
+  if (!user) {
+    res.status(401).json({ error: "Not authenticated" });
+    return null;
+  }
+  if (user.role !== "admin") {
+    res.status(403).json({ error: "Insufficient permissions" });
+    return null;
+  }
+
+  return { authorized: true, user };
+}
+
 // Strict rate limit on login attempts — 5 per minute per IP
 const loginLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
@@ -230,7 +260,9 @@ router.post("/setup", setupLimiter, async (req, res) => {
         .status(400)
         .json({ error: "Username and password are required" });
     }
-    await authService.createUser(username, password);
+    // First-run account is always an admin — every other account defaults to
+    // the least-privileged tier and has to be promoted deliberately.
+    await authService.createUser(username, password, "admin");
 
     // Auto-login after setup — generate tokens
     const result = await authService.login(
@@ -447,10 +479,12 @@ const localResetTokenLimiter = rateLimit({
  * Generated while signed in, redeemable from the login screen. Only hashes are
  * stored, and each code works exactly once.
  */
+// Admin-only: a recovery code redeems into a password reset on the ADMIN
+// account, so letting any signed-in user mint one would hand a viewer a
+// one-step path to seizing the panel.
 router.get("/recovery-codes", async (req, res) => {
   try {
-    const user = await getAuthenticatedUser(req);
-    if (!user) return res.status(401).json({ error: "Not authenticated" });
+    if (!(await resolveAdminCaller(req, res))) return;
     res.json(await authService.getRecoveryCodeStatus());
   } catch (error) {
     res.status(500).json({ error: sanitizeError(error.message) });
@@ -459,8 +493,7 @@ router.get("/recovery-codes", async (req, res) => {
 
 router.post("/recovery-codes", async (req, res) => {
   try {
-    const user = await getAuthenticatedUser(req);
-    if (!user) return res.status(401).json({ error: "Not authenticated" });
+    if (!(await resolveAdminCaller(req, res))) return;
     const result = await authService.generateRecoveryCodes(10);
     log.info("New recovery codes generated");
     res.json({ success: true, ...result });
@@ -669,6 +702,146 @@ router.post("/reset-password", resetLimiter, async (req, res) => {
     });
   } catch (error) {
     log.error(`Password reset failed: ${error.message}`);
+    res.status(400).json({ error: sanitizeError(error.message) });
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ * Admin: account and role management
+ *
+ * Every route here resolves the caller via resolveAdminCaller() rather than
+ * requireRole(), because /api/auth/* bypasses the auth middleware.
+ * ------------------------------------------------------------------ */
+
+/**
+ * GET /api/auth/users
+ * List accounts (no password hashes).
+ */
+router.get("/users", async (req, res) => {
+  try {
+    if (!(await resolveAdminCaller(req, res))) return;
+    res.json({ users: await authService.getUsers() });
+  } catch (error) {
+    log.error(`Failed to list users: ${error.message}`);
+    res.status(500).json({ error: sanitizeError(error.message) });
+  }
+});
+
+/**
+ * POST /api/auth/users
+ * Create an account. Role defaults to the least-privileged tier.
+ */
+router.post("/users", async (req, res) => {
+  try {
+    if (!(await resolveAdminCaller(req, res))) return;
+
+    const { username, password, role } = req.body || {};
+    if (!isNonEmptyString(username) || !isNonEmptyString(password)) {
+      return res
+        .status(400)
+        .json({ error: "Username and password are required" });
+    }
+
+    const user = await authService.createUser(
+      username,
+      password,
+      role || DEFAULT_ROLE,
+    );
+    res.status(201).json({ success: true, user });
+  } catch (error) {
+    log.warn(`User creation failed: ${error.message}`);
+    res.status(400).json({ error: sanitizeError(error.message) });
+  }
+});
+
+/**
+ * PUT /api/auth/users/:id/role
+ * Reassign an account's role. Refuses to demote the last admin.
+ */
+router.put("/users/:id/role", async (req, res) => {
+  try {
+    if (!(await resolveAdminCaller(req, res))) return;
+
+    const { role } = req.body || {};
+    if (!isNonEmptyString(role)) {
+      return res.status(400).json({ error: "Role is required" });
+    }
+
+    const user = await authService.setUserRole(req.params.id, role);
+    res.json({ success: true, user });
+  } catch (error) {
+    log.warn(`Role change failed: ${error.message}`);
+    res.status(400).json({ error: sanitizeError(error.message) });
+  }
+});
+
+/**
+ * DELETE /api/auth/users/:id
+ * Remove an account. Refuses to delete the last admin, or the caller's own
+ * account — self-deletion leaves the browser holding a token for a user that
+ * no longer exists, which surfaces as an unexplained hard logout.
+ */
+router.delete("/users/:id", async (req, res) => {
+  try {
+    const caller = await resolveAdminCaller(req, res);
+    if (!caller) return;
+
+    if (caller.user && caller.user.userId === req.params.id) {
+      return res
+        .status(400)
+        .json({ error: "You cannot delete your own account" });
+    }
+
+    const user = await authService.deleteUser(req.params.id);
+    res.json({ success: true, user });
+  } catch (error) {
+    log.warn(`User deletion failed: ${error.message}`);
+    res.status(400).json({ error: sanitizeError(error.message) });
+  }
+});
+
+/**
+ * GET /api/auth/permissions
+ * Read the capability -> minimum-role table.
+ *
+ * Readable by any signed-in account, not just admins: the client uses it to
+ * hide controls the current role cannot use. It is policy, not a secret, and
+ * the server remains the enforcement boundary either way.
+ */
+router.get("/permissions", async (req, res) => {
+  try {
+    if (await authService.isAuthEnabled()) {
+      const user = await getAuthenticatedUser(req);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    res.json({
+      permissions: authService.getRolePermissions(),
+      roles: ROLES,
+    });
+  } catch (error) {
+    log.error(`Failed to read role permissions: ${error.message}`);
+    res.status(500).json({ error: sanitizeError(error.message) });
+  }
+});
+
+/**
+ * PUT /api/auth/permissions
+ * Retune the capability -> minimum-role table. Admin only.
+ */
+router.put("/permissions", async (req, res) => {
+  try {
+    if (!(await resolveAdminCaller(req, res))) return;
+
+    const { permissions } = req.body || {};
+    if (!permissions || typeof permissions !== "object") {
+      return res.status(400).json({ error: "Permissions object required" });
+    }
+
+    const updated = await authService.updateRolePermissions(permissions);
+    res.json({ success: true, permissions: updated });
+  } catch (error) {
+    log.warn(`Role permission update failed: ${error.message}`);
     res.status(400).json({ error: sanitizeError(error.message) });
   }
 });
