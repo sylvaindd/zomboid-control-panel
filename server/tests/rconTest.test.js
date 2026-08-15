@@ -20,7 +20,10 @@ function getTestHandler() {
   const layer = router.stack.find(
     (entry) => entry.route?.path === '/test' && entry.route.methods.post,
   );
-  return layer.route.stack[0].handle;
+  // The first stack entry is now an authorization middleware; these tests
+  // target the business-logic handler, so take the last one. Authorization
+  // itself is covered by the dedicated role-rejection suites.
+  return layer.route.stack[layer.route.stack.length - 1].handle;
 }
 
 describe('testRconConnection', () => {

@@ -70,6 +70,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useToast } from '@/components/ui/use-toast'
 import { useConfirm } from '@/contexts/ConfirmContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
@@ -649,6 +650,12 @@ function SectionHeader({
 }
 
 export default function ServerConfig() {
+  // The page as a whole follows the config.files capability, but the "Mod
+  // Settings" tab is different: it edits sandbox options live through
+  // PanelBridge's /command endpoint, a generic bridge dispatcher that can send
+  // any command at all. That stays admin-only, so the tab is hidden rather
+  // than left to fail with a 403 on open.
+  const { isAdmin } = useAuth()
   const [activeTab, setActiveTab] = useState('ini')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -1836,7 +1843,7 @@ export default function ServerConfig() {
             { value: 'spawnpoints', label: 'Spawn Points', icon: MapPin, dirty: false, count: 0, missing: false },
             { value: 'spawnregions', label: 'Spawn Regions', icon: Map, dirty: false, count: 0, missing: false },
             { value: 'modsettings', label: 'Mod Settings', icon: Puzzle, dirty: false, count: modifiedModSettingsCount, missing: false },
-          ] as const).map((t) => (
+          ] as const).filter((t) => t.value !== 'modsettings' || isAdmin).map((t) => (
             <TabsTrigger
               key={t.value}
               value={t.value}

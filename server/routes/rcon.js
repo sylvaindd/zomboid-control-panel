@@ -5,6 +5,7 @@ import { getCommandHistory } from '../database/init.js';
 import { PZ_COMMANDS } from '../utils/commands.js';
 import { sanitizeError } from '../utils/sanitize.js';
 import { testRconConnection } from '../services/rcon.js';
+import { requireRole, requirePermission } from '../services/auth.js';
 
 const router = express.Router();
 
@@ -22,8 +23,11 @@ function validateTestInput(host, port, password) {
   return null;
 }
 
-// Execute raw RCON command
-router.post('/execute', async (req, res) => {
+// Execute raw RCON command.
+// Operator-configurable, but defaults to admin: this takes an arbitrary
+// string straight to RCON, so whoever holds it can run quit, additem,
+// grantadmin or banid regardless of what the panel UI exposes.
+router.post('/execute', requirePermission('rcon.execute'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { command } = req.body;
@@ -67,8 +71,10 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// Connect to RCON
-router.post('/connect', async (req, res) => {
+// Connect to RCON. Admin-only regardless of rcon.execute: this rewrites the
+// panel's stored RCON host/port/password, which is connection configuration
+// rather than in-game command execution.
+router.post('/connect', requireRole('admin'), async (req, res) => {
   try {
     const rconService = req.app.get('rconService');
     const { host, port, password } = req.body;
@@ -116,7 +122,7 @@ router.post('/connect', async (req, res) => {
 
 // Test arbitrary RCON credentials without applying them — lets the UI
 // validate host/port/password before the user saves a server's settings.
-router.post('/test', async (req, res) => {
+router.post('/test', requireRole('admin'), async (req, res) => {
   try {
     const { host, port, password } = req.body;
     log.info(`POST /test (host=${host || 'none'}, port=${port || 'none'})`);
@@ -150,7 +156,7 @@ router.get('/health', async (req, res) => {
 });
 
 // Disconnect from RCON
-router.post('/disconnect', async (req, res) => {
+router.post('/disconnect', requireRole('admin'), async (req, res) => {
   try {
     log.info('POST /disconnect');
     const rconService = req.app.get('rconService');

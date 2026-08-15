@@ -16,7 +16,7 @@ import {
 import { sanitizeError, sanitizeIniValue } from "../utils/sanitize.js";
 import { normalizeMemoryGb } from "../utils/memory.js";
 import { withFileLock, writeFileAtomic } from "../utils/fileWriteQueue.js";
-import { requireRole } from "../services/auth.js";
+import { requireRole, requirePermission } from "../services/auth.js";
 import { runManagedLifecycle } from "../services/managedContainer.js";
 
 const router = express.Router();
@@ -659,7 +659,7 @@ router.get("/network-interfaces", async (req, res) => {
 });
 
 // Start server
-router.post("/start", async (req, res) => {
+router.post("/start", requirePermission("server.lifecycle"), async (req, res) => {
   try {
     const activeServer = await getActiveServer();
     log.info(
@@ -909,7 +909,7 @@ router.post("/start", async (req, res) => {
 });
 
 // Stop server (graceful via RCON)
-router.post("/stop", async (req, res) => {
+router.post("/stop", requirePermission("server.lifecycle"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     log.info("POST /stop — graceful shutdown requested");
@@ -962,7 +962,7 @@ router.post("/stop", async (req, res) => {
 });
 
 // Force stop server
-router.post("/force-stop", async (req, res) => {
+router.post("/force-stop", requirePermission("server.lifecycle"), async (req, res) => {
   try {
     log.info("POST /force-stop — force kill requested");
     const activeServer = await getActiveServer();
@@ -1002,7 +1002,7 @@ router.post("/force-stop", async (req, res) => {
 });
 
 // Restart server
-router.post("/restart", async (req, res) => {
+router.post("/restart", requirePermission("server.lifecycle"), async (req, res) => {
   try {
     const activeServer = await getActiveServer();
     if (activeServer?.isRemote) {
@@ -1040,7 +1040,7 @@ router.post("/restart", async (req, res) => {
 });
 
 // Save world
-router.post("/save", async (req, res) => {
+router.post("/save", requirePermission("server.save"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const result = await rconService.save();
@@ -1052,7 +1052,7 @@ router.post("/save", async (req, res) => {
 });
 
 // Send server message
-router.post("/message", async (req, res) => {
+router.post("/message", requirePermission("chat.broadcast"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const { message } = req.body;
@@ -1079,7 +1079,7 @@ router.post("/message", async (req, res) => {
 });
 
 // Weather controls
-router.post("/weather/start-rain", async (req, res) => {
+router.post("/weather/start-rain", requirePermission("world.environment"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const { intensity } = req.body;
@@ -1090,7 +1090,7 @@ router.post("/weather/start-rain", async (req, res) => {
   }
 });
 
-router.post("/weather/stop-rain", async (req, res) => {
+router.post("/weather/stop-rain", requirePermission("world.environment"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const result = await rconService.stopRain();
@@ -1100,7 +1100,7 @@ router.post("/weather/stop-rain", async (req, res) => {
   }
 });
 
-router.post("/weather/start-storm", async (req, res) => {
+router.post("/weather/start-storm", requirePermission("world.environment"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const { duration } = req.body;
@@ -1111,7 +1111,7 @@ router.post("/weather/start-storm", async (req, res) => {
   }
 });
 
-router.post("/weather/stop", async (req, res) => {
+router.post("/weather/stop", requirePermission("world.environment"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const result = await rconService.stopWeather();
@@ -1122,7 +1122,7 @@ router.post("/weather/stop", async (req, res) => {
 });
 
 // Events
-router.post("/events/chopper", async (req, res) => {
+router.post("/events/chopper", requirePermission("world.environment"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const result = await rconService.triggerChopper();
@@ -1132,7 +1132,7 @@ router.post("/events/chopper", async (req, res) => {
   }
 });
 
-router.post("/events/gunshot", async (req, res) => {
+router.post("/events/gunshot", requirePermission("world.environment"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const result = await rconService.triggerGunshot();
@@ -1142,7 +1142,7 @@ router.post("/events/gunshot", async (req, res) => {
   }
 });
 
-router.post("/events/lightning", async (req, res) => {
+router.post("/events/lightning", requirePermission("world.environment"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const { username } = req.body;
@@ -1156,7 +1156,7 @@ router.post("/events/lightning", async (req, res) => {
   }
 });
 
-router.post("/events/thunder", async (req, res) => {
+router.post("/events/thunder", requirePermission("world.environment"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const { username } = req.body;
@@ -1170,7 +1170,7 @@ router.post("/events/thunder", async (req, res) => {
   }
 });
 
-router.post("/events/horde", async (req, res) => {
+router.post("/events/horde", requirePermission("world.environment"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const { count, username } = req.body;
@@ -1440,7 +1440,7 @@ async function getSteamLoginArgs() {
 }
 
 // SteamCMD Installation endpoint
-router.post("/install", async (req, res) => {
+router.post("/install", requireRole("admin"), async (req, res) => {
   try {
     const {
       steamcmdPath,
@@ -1874,7 +1874,7 @@ router.post("/install", async (req, res) => {
 });
 
 // Quick Setup - Create new server config using existing files (no SteamCMD download)
-router.post("/quick-setup", async (req, res) => {
+router.post("/quick-setup", requireRole("admin"), async (req, res) => {
   try {
     const {
       installPath,
@@ -2115,7 +2115,7 @@ router.post("/quick-setup", async (req, res) => {
 });
 
 // Configure RCON in server's .ini file
-router.post("/configure-rcon", async (req, res) => {
+router.post("/configure-rcon", requireRole("admin"), async (req, res) => {
   try {
     const { rconPassword, rconPort: rawRconPort = 27015 } = req.body;
     const rconPort = validateInt(rawRconPort, 1024, 65535, 27015);
@@ -2186,7 +2186,7 @@ router.post("/configure-rcon", async (req, res) => {
 });
 
 // Configure server network settings (port, UPnP) in .ini file
-router.post("/configure-network", async (req, res) => {
+router.post("/configure-network", requireRole("admin"), async (req, res) => {
   try {
     const { serverPort: rawServerPort = 16261, useUpnp = true } = req.body;
     const serverPort = validateInt(rawServerPort, 1024, 65535, 16261);
@@ -2266,7 +2266,7 @@ router.post("/configure-network", async (req, res) => {
 });
 
 // Alarm - sound building alarm
-router.post("/alarm", async (req, res) => {
+router.post("/alarm", requirePermission("world.environment"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const result = await rconService.alarm();
@@ -2279,7 +2279,7 @@ router.post("/alarm", async (req, res) => {
 });
 
 // Remove zombies
-router.post("/removezombies", async (req, res) => {
+router.post("/removezombies", requirePermission("world.environment"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const result = await rconService.removeZombies();
@@ -2292,7 +2292,7 @@ router.post("/removezombies", async (req, res) => {
 });
 
 // Reload Lua script
-router.post("/reloadlua", async (req, res) => {
+router.post("/reloadlua", requireRole("admin"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const { filename } = req.body;
@@ -2317,7 +2317,7 @@ router.post("/reloadlua", async (req, res) => {
 });
 
 // Set log level
-router.post("/log", async (req, res) => {
+router.post("/log", requireRole("admin"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const { type, level } = req.body;
@@ -2384,7 +2384,7 @@ router.post("/log", async (req, res) => {
 });
 
 // Server statistics
-router.post("/stats", async (req, res) => {
+router.post("/stats", requireRole("admin"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const { mode, period } = req.body;
@@ -2411,7 +2411,7 @@ router.post("/stats", async (req, res) => {
 });
 
 // Release safehouse
-router.post("/releasesafehouse", async (req, res) => {
+router.post("/releasesafehouse", requirePermission("players.moderate"), async (req, res) => {
   try {
     const rconService = req.app.get("rconService");
     const result = await rconService.releaseSafehouse();
@@ -2423,7 +2423,7 @@ router.post("/releasesafehouse", async (req, res) => {
 });
 
 // Update server using SteamCMD
-router.post("/steam-update", async (req, res) => {
+router.post("/steam-update", requireRole("admin"), async (req, res) => {
   try {
     let {
       steamcmdPath,
@@ -2668,7 +2668,7 @@ router.post("/steam-update", async (req, res) => {
 });
 
 // Auto-download and install SteamCMD
-router.post("/steamcmd/download", async (req, res) => {
+router.post("/steamcmd/download", requireRole("admin"), async (req, res) => {
   try {
     log.info(`POST /steamcmd/download (platform=${process.platform})`);
     const defaultPath = isWindows
@@ -3019,7 +3019,7 @@ router.post("/delete-files", requireRole("admin"), async (req, res) => {
 });
 
 // List directory contents for the in-app folder browser
-router.post("/list-directory", async (req, res) => {
+router.post("/list-directory", requireRole("admin"), async (req, res) => {
   try {
     const { dirPath } = req.body;
 
@@ -3139,7 +3139,7 @@ router.post("/list-directory", async (req, res) => {
 });
 
 // Open folder browser dialog (uses PowerShell on Windows, zenity/kdialog on Linux)
-router.post("/browse-folder", async (req, res) => {
+router.post("/browse-folder", requireRole("admin"), async (req, res) => {
   try {
     const { initialPath, description = "Select a folder" } = req.body;
 
@@ -3597,7 +3597,7 @@ router.get("/console-log/stream", async (req, res) => {
 });
 
 // Clear server console log
-router.post("/console-log/clear", async (req, res) => {
+router.post("/console-log/clear", requireRole("admin"), async (req, res) => {
   try {
     const activeServer = await getActiveServer();
     // server-console.txt is in zomboidDataPath (where Server/, Saves/, Logs/ are)
@@ -3664,7 +3664,7 @@ router.get("/update-check/status", async (req, res) => {
 });
 
 // Set update check interval
-router.post("/update-check/interval", async (req, res) => {
+router.post("/update-check/interval", requireRole("admin"), async (req, res) => {
   try {
     const updateChecker = req.app.get("updateChecker");
     if (!updateChecker) {
@@ -3690,7 +3690,7 @@ router.post("/update-check/interval", async (req, res) => {
 let wipeInProgress = false;
 
 // Preview what will be wiped (dry-run)
-router.post("/wipe/preview", async (req, res) => {
+router.post("/wipe/preview", requireRole("admin"), async (req, res) => {
   try {
     const serverManager = req.app.get("serverManager");
     await serverManager.loadConfig();

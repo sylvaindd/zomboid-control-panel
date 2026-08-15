@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   Zap,
   Crosshair,
@@ -888,6 +889,7 @@ interface ActivityEntry {
 }
 
 export default function Events() {
+  const { can } = useAuth()
   const [loading, setLoading] = useState<string | null>(null)
   const [players, setPlayers] = useState<Player[]>([])
   const [selectedPlayer, setSelectedPlayer] = useState<string>('')
@@ -1363,8 +1365,10 @@ export default function Events() {
   const spawnVehicle = (vehicleId: string, username: string) =>
     executeCommand(`addvehicle "${vehicleId}" "${username}"`)
 
-  // Announcement
+  // Announcement — goes out over POST /server/message, which follows the
+  // configurable chat.broadcast capability.
   const sendAnnouncement = () => serverApi.sendMessage(announcement)
+  const canBroadcast = can('chat.broadcast')
 
   const getBridgeFieldValue = (fieldKey: string): string => bridgeOperationFormValues[bridgeOperation]?.[fieldKey] ?? ''
 
@@ -2505,10 +2509,12 @@ export default function Events() {
                   <Navigation className="h-3 w-3 text-destructive" /> horde alert
                 </Button>
               </div>
-              <Button variant="outline" onClick={() => handleAction('Send announcement', sendAnnouncement)} disabled={loading !== null || !announcement.trim()} className="h-9 gap-2 text-xs font-medium">
-                {loading === 'Send announcement' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Megaphone className="w-3.5 h-3.5" />}
-                broadcast message
-              </Button>
+              {canBroadcast && (
+                <Button variant="outline" onClick={() => handleAction('Send announcement', sendAnnouncement)} disabled={loading !== null || !announcement.trim()} className="h-9 gap-2 text-xs font-medium">
+                  {loading === 'Send announcement' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Megaphone className="w-3.5 h-3.5" />}
+                  broadcast message
+                </Button>
+              )}
             </div>
           </TacticalPanel>
         )}

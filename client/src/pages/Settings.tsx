@@ -29,6 +29,7 @@ import {
   RotateCw,
   Lock,
   User,
+  Users,
   ExternalLink,
   FolderOpen,
   Palette,
@@ -93,6 +94,7 @@ import { useSocket } from "@/contexts/SocketContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme, type ThemeName } from "@/contexts/ThemeContext";
 import { BridgeStatusBadge } from "@/components/BridgeStatusBadge";
+import UsersAndRoles from "@/components/settings/UsersAndRoles";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
@@ -307,7 +309,7 @@ export default function Settings() {
   const [panelApplyResultDismissed, setPanelApplyResultDismissed] =
     useState(false);
   const { toast } = useToast();
-  const { user, authEnabled, logout } = useAuth();
+  const { user, authEnabled, logout, isAdmin } = useAuth();
 
   // Change password state
   const [currentPassword, setCurrentPassword] = useState("");
@@ -437,7 +439,12 @@ export default function Settings() {
     JSON.stringify(settings) !== JSON.stringify(originalSettings);
 
   // Section navigation via tabs
-  const settingsSections = [
+  // Every section here configures the panel or the game server and is backed
+  // by admin-only routes — except "security" (your own password, which is
+  // self-service) and "about" (read-only version info). Non-admins reach this
+  // page through the sidebar's change-password link, so the rest is filtered
+  // out rather than rendering controls that would 403.
+  const allSettingsSections = [
     {
       id: "general",
       label: "General",
@@ -479,6 +486,15 @@ export default function Settings() {
       group: "Panel",
       tip: "Account password and sign-in",
       description: "Panel account password and sign-in controls.",
+    },
+    {
+      id: "users",
+      label: "Users & roles",
+      icon: Users,
+      group: "Panel",
+      tip: "Panel accounts and what each role may do",
+      description:
+        "Panel accounts, their roles, and which capabilities each role can reach.",
     },
     {
       id: "connection",
@@ -526,6 +542,10 @@ export default function Settings() {
         "Panel version and runtime details, plus where the remaining settings live.",
     },
   ];
+  const NON_ADMIN_SECTIONS = new Set(["security", "about"]);
+  const settingsSections = isAdmin
+    ? allSettingsSections
+    : allSettingsSections.filter((s) => NON_ADMIN_SECTIONS.has(s.id));
   const settingsGroups = settingsSections.reduce<
     { name: string; sections: typeof settingsSections }[]
   >((groups, section) => {
@@ -548,7 +568,9 @@ export default function Settings() {
   };
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeSection, setActiveSection] = useState(
-    () => resolveTabId(searchParams.get("tab")) ?? "general",
+    // "general" is admin-only, so fall back to whatever the role can actually see.
+    () =>
+      resolveTabId(searchParams.get("tab")) ?? settingsSections[0]?.id ?? "general",
   );
 
   // Sync active tab to URL
@@ -5309,6 +5331,10 @@ export default function Settings() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="users" className="mt-0">
+            <UsersAndRoles />
           </TabsContent>
 
           <TabsContent value="about" className="mt-0 space-y-5">

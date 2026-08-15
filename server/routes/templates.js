@@ -72,7 +72,7 @@ router.get("/:id/export", async (req, res) => {
   }
 });
 
-router.post("/:id/preview", async (req, res) => {
+router.post("/:id/preview", requireRole("admin"), async (req, res) => {
   try {
     const { serverId } = req.body || {};
     if (!serverId) return res.status(400).json({ error: "serverId is required" });

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { useEffect, useState, useContext } from 'react'
+import { useEffect, useState, useContext, useMemo } from 'react'
 import {
   LayoutDashboard,
   Gauge,
@@ -30,7 +30,8 @@ import {
   Coffee,
   PanelLeftClose,
   PanelLeft,
-  LogOut
+  LogOut,
+  KeyRound
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ConnectionStatus } from './ConnectionStatus'
@@ -39,6 +40,7 @@ import { serversApi, ServerInstance, updateApi, UpdateStatus, serverApi, modsApi
 import { SocketContext } from '@/contexts/SocketContext'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { canAccessPath } from '@/lib/routeAccess'
 import { useToast } from '@/components/ui/use-toast'
 import {
   DropdownMenu,
@@ -66,6 +68,11 @@ interface NavItem {
   allowRemoteConfigMirror?: boolean
   disabled?: boolean
   badge?: string
+  // Reachable by non-admins but deliberately kept out of their sidebar.
+  // Only /settings uses this: the page itself must stay open so anyone can
+  // change their own password, but it is an admin surface otherwise, so
+  // non-admins get to it from the footer key icon instead of a nav entry.
+  navAdminOnly?: boolean
 }
 
 interface NavSection {
@@ -139,7 +146,7 @@ const navSections: NavSection[] = [
     color: 'slate',
     items: [
       { to: '/discord', icon: MessageSquare, label: 'Discord' },
-      { to: '/settings', icon: Settings, label: 'Panel Settings' },
+      { to: '/settings', icon: Settings, label: 'Panel Settings', navAdminOnly: true },
       { to: '/debug', icon: Bug, label: 'Debug Logs' },
     ]
   },
@@ -204,7 +211,7 @@ const sectionToneStyles = {
 
 // Auth footer — shows logged-in user and logout button
 function AuthFooter() {
-  const { user, authEnabled, logout } = useAuth()
+  const { user, authEnabled, logout, isAdmin } = useAuth()
 
   if (!authEnabled || !user) return null
 
@@ -212,6 +219,20 @@ function AuthFooter() {
     <span className="inline-flex min-w-0 items-center gap-1.5 text-xs">
       <span className="min-w-0 truncate text-foreground/85 font-medium" title={user.username}>{user.username}</span>
       <span className="shrink-0 text-muted-foreground/50">·</span>
+      {/* Panel Settings is hidden from non-admins, but changing your OWN
+          password is self-service — so keep a way in for them. */}
+      {!isAdmin && (
+        <>
+          <NavLink
+            to="/settings?tab=security"
+            className="shrink-0 text-muted-foreground/70 hover:text-foreground transition-colors"
+            title="Change password"
+          >
+            <KeyRound className="h-3 w-3" />
+          </NavLink>
+          <span className="shrink-0 text-muted-foreground/50">·</span>
+        </>
+      )}
       <button
         type="button"
         onClick={logout}
@@ -271,6 +292,27 @@ export default function Layout({ children }: LayoutProps) {
     !!item.requiresLocal &&
     !!activeServer?.isRemote &&
     !(item.allowRemoteConfigMirror && activeServer.remoteConfigConfigured)
+
+  const { can, isAdmin } = useAuth()
+
+  // Hide what the current role cannot open. Visibility comes from the shared
+  // ROUTE_ACCESS table that also guards the router, so the sidebar and the
+  // routes can't drift apart. A section whose items are all hidden disappears
+  // entirely rather than rendering an empty group header.
+  const visibleSections = useMemo(
+    () =>
+      navSections
+        .map(section => ({
+          ...section,
+          items: section.items.filter(
+            item =>
+              canAccessPath(item.to, { isAdmin, can }) &&
+              (!item.navAdminOnly || isAdmin),
+          ),
+        }))
+        .filter(section => section.items.length > 0),
+    [can, isAdmin],
+  )
   const [servers, setServers] = useState<ServerInstance[]>([])
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true')
@@ -714,7 +756,7 @@ export default function Layout({ children }: LayoutProps) {
           </Tooltip>
 
           {/* Sections */}
-          {navSections.map((section, sectionIdx) => {
+          {visibleSections.map((section, sectionIdx) => {
             const tone = sectionToneStyles[section.color as keyof typeof sectionToneStyles] || sectionToneStyles.slate
             const sectionHasSignal =
               (section.id === 'config' && modUpdatesAvailable > 0) ||

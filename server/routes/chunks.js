@@ -578,7 +578,7 @@ router.get("/suggested-paths", async (req, res) => {
 // to the legacy flat setting. The path is validated with the same rules as
 // the /saves customPath query parameter so users can't smuggle in arbitrary
 // directories via this endpoint.
-router.post("/save-path", async (req, res) => {
+router.post("/save-path", requireRole("admin"), async (req, res) => {
   try {
     const { path: rawPath } = req.body || {};
     if (!rawPath || typeof rawPath !== "string") {
